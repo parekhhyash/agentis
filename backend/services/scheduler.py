@@ -321,7 +321,7 @@ async def _email_summary(
     settings = get_settings()
     try:
         connection = await google_connections.get_connection(user_id)
-        if not connection:
+        if not connection or not connection.gmail:
             return False
         token = await google_connections.get_access_token(google_oauth.oauth_config(settings), user_id)
         ids = [o.request_id for o in outcomes if o.request_id]

@@ -96,7 +96,8 @@ class Settings(BaseSettings):
     hubspot_mcp_client_id: str | None = None
     hubspot_mcp_client_secret: str | None = None
     hubspot_mcp_url: str = "https://mcp.hubspot.com"
-    hubspot_mcp_authorize_url: str = "https://mcp.hubspot.com/oauth/authorize"
+    # Fallbacks: the server's own metadata is used when it can be read.
+    hubspot_mcp_authorize_url: str = "https://mcp.hubspot.com/oauth/authorize/user"
     hubspot_mcp_token_url: str = "https://mcp.hubspot.com/oauth/v3/token"
     # Salesforce: an External Client App (OAuth scopes mcp_api + refresh_token,
     # PKCE on) and an activated hosted MCP server.

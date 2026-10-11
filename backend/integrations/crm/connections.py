@@ -2,8 +2,9 @@
 an MCP session to one of them.
 
 Credentials are encrypted at rest: the OAuth refresh token for HubSpot and
-Salesforce, and Zoho's MCP URL (it embeds the server's key). Access tokens
-live only in memory and are refreshed when they expire or are rejected.
+Salesforce, a Salesforce company app's consumer secret (if it has one), and
+Zoho's MCP URL (it embeds the server's key). Access tokens live only in
+memory and are refreshed when they expire or are rejected.
 """
 
 import time
@@ -18,7 +19,7 @@ from cryptography.fernet import InvalidToken
 
 from config.settings import get_settings
 from integrations.crm import oauth
-from integrations.crm.providers import NAMES, PROVIDERS, CrmError, is_configured, oauth_provider
+from integrations.crm.providers import NAMES, PROVIDERS, CrmError, SalesforceApp, is_configured, oauth_provider
 from integrations.mcp.client import McpAuthError, McpConnection, open_connection
 from services import supabase_rest
 
@@ -34,6 +35,8 @@ class CrmConnection:
     account_label: str
     tool_count: int | None
     connected_at: str | None
+    # Salesforce: the company app it signed in with (no secret), to reconnect.
+    app: dict[str, str] | None = None
 
 
 def _key() -> str:
@@ -60,10 +63,13 @@ async def _row(user_id: str, provider: str) -> dict[str, Any] | None:
 
 async def list_connections(user_id: str) -> dict[str, CrmConnection]:
     rows = await supabase_rest.select(
-        TABLE, {"user_id": f"eq.{user_id}", "select": "provider,account_label,tool_count,connected_at"}
+        TABLE, {"user_id": f"eq.{user_id}", "select": "provider,account_label,tool_count,connected_at,client_id,login_url"}
     )
     return {
-        r["provider"]: CrmConnection(r["provider"], r.get("account_label") or NAMES[r["provider"]], r.get("tool_count"), r.get("connected_at"))
+        r["provider"]: CrmConnection(
+            r["provider"], r.get("account_label") or NAMES[r["provider"]], r.get("tool_count"), r.get("connected_at"),
+            {"client_id": r["client_id"], "login_url": r.get("login_url") or ""} if r.get("client_id") else None,
+        )
         for r in rows
         if r.get("provider") in PROVIDERS
     }
@@ -81,7 +87,8 @@ async def connected_providers(user_id: str) -> list[str]:
 
 
 async def save_connection(
-    user_id: str, provider: str, *, mcp_url: str, refresh_token: str | None, account_label: str, tool_count: int
+    user_id: str, provider: str, *, mcp_url: str, refresh_token: str | None, account_label: str, tool_count: int,
+    app: SalesforceApp | None = None,
 ) -> None:
     now = datetime.now(timezone.utc).isoformat()
     await supabase_rest.upsert(
@@ -92,11 +99,28 @@ async def save_connection(
             "account_label": account_label[:200],
             "mcp_url_encrypted": _encrypt(mcp_url),
             "refresh_token_encrypted": _encrypt(refresh_token) if refresh_token else None,
+            "client_id": app.client_id if app else None,
+            "client_secret_encrypted": _encrypt(app.client_secret) if app and app.client_secret else None,
+            "login_url": app.login_url if app else None,
             "tool_count": tool_count,
             "connected_at": now,
             "updated_at": now,
         },
         on_conflict="user_id,provider",
+    )
+
+
+def app_from_row(provider: str, row: dict[str, Any]) -> SalesforceApp | None:
+    """The company Salesforce app a connection signed in with (older rows used
+    the server's own app and have none)."""
+    if provider != "salesforce" or not row.get("client_id"):
+        return None
+    server = _decrypt(row["mcp_url_encrypted"], provider).rstrip("/").rsplit("/", 1)[-1]
+    return SalesforceApp(
+        client_id=row["client_id"],
+        client_secret=_decrypt(row["client_secret_encrypted"], provider) if row.get("client_secret_encrypted") else None,
+        login_url=row.get("login_url") or "https://login.salesforce.com",
+        server=server,
     )
 
 
@@ -115,8 +139,9 @@ async def _access_token(user_id: str, provider: str, row: dict[str, Any], force:
         return cached[0]
     if not row.get("refresh_token_encrypted"):
         raise CrmError(f"Reconnect {NAMES[provider]} on the Connect page", 409)
-    config = oauth_provider(provider, get_settings())
+    config = oauth_provider(provider, get_settings(), app_from_row(provider, row))
     async with httpx.AsyncClient(timeout=15.0) as client:
+        config = await oauth.with_server_endpoints(config, client)
         try:
             grant = await oauth.refresh(config, _decrypt(row["refresh_token_encrypted"], provider), client)
         except CrmError as exc:

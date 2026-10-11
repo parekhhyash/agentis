@@ -74,6 +74,18 @@ travels encrypted in `state`), connections in `crm_connections`
 (`supabase/migrations/20261010000000_crm_connections.sql`). Setup per CRM is in
 the root README.
 
+- HubSpot: one MCP auth app for everyone (`HUBSPOT_MCP_CLIENT_ID/SECRET`); the
+  authorize and token endpoints come from the server's RFC 8414 metadata when
+  they're on HubSpot's hosts (`oauth.with_server_endpoints`, cached a day).
+- Salesforce: hosted MCP servers only accept an External Client App from the
+  same org, so `POST /integrations/crm/salesforce/connect` takes the company's
+  `{client_id, client_secret?, login_url, server}`, checked by
+  `providers.check_salesforce_app` (Salesforce hosts only, so the token call
+  can't be pointed elsewhere). The app rides in the encrypted `state`, and the
+  connection keeps the key, domain and encrypted secret for refreshes
+  (`20261014000000_crm_company_apps.sql`). Sandbox domains use the sandbox
+  server path.
+
 ## How the Data & Reporting Agent works
 
 ```
@@ -93,6 +105,18 @@ Question (+ attached files, company profile, earlier turns)
 `POST /data/datasets` takes `{filename, content_base64}` (CSV or .xlsx, up to
 5 MB / 20,000 rows) and stores typed rows in `datasets`
 (`supabase/migrations/20261009000000_data_reporting.sql`).
+
+Google Sheets (`integrations/google/sheets.py`): `POST /data/sheets` links one
+tab (the link's `gid`, else the first) as a dataset with `source =
+'google_sheets'` (`20261014010000_google_sheets_datasets.sql`), parsed like an
+upload from the tab's formatted values. Before a report plans its queries,
+linked sheets older than 5 minutes are read again (`_refresh_sheets`); one that
+can't be read keeps its last copy and the report says so.
+`POST /integrations/google/sheets` creates a sheet from a table (leads, report
+tables); text cells are always written as strings, never formulas. Scopes:
+`spreadsheets.readonly` + `drive.file`, asked for on their own
+(`/integrations/google/auth-url?sheets=true`) and added to the same Google
+grant as Gmail; a different Google account than the one connected is refused.
 
 ## How the Content & Copy Agent works
 
@@ -228,7 +252,7 @@ backend/
 ├── agents/operations/      # schedule.py (format, next run), proposal checks in agent.py
 ├── integrations/mcp/       # MCP client (Streamable HTTP, official SDK), tool classification
 ├── integrations/crm/       # HubSpot/Salesforce/Zoho providers, OAuth + PKCE, connections
-├── integrations/google/    # OAuth, encrypted connections, Gmail + Calendar clients
+├── integrations/google/    # OAuth, encrypted connections, Gmail + Calendar + Sheets clients
 ├── integrations/social/    # LinkedIn/X OAuth, encrypted tokens, posting
 ├── integrations/oauth_common.py  # PKCE + encrypted OAuth state (CRMs, LinkedIn, X)
 ├── agents/lead_research/

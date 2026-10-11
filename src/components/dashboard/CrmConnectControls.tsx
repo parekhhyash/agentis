@@ -1,11 +1,137 @@
 import { useState } from 'react'
 
-import { listCrmTools, type CrmProvider, type CrmTool, type useCrmConnections } from '../../lib/crm'
+import { listCrmTools, type CrmProvider, type CrmProviderStatus, type CrmTool, type useCrmConnections } from '../../lib/crm'
 
 const KIND_LABELS: Record<CrmTool['kind'], { title: string; tone: string }> = {
   read: { title: 'Looks up on its own', tone: 'bg-emerald-50 text-emerald-700' },
   write: { title: 'Asks you first', tone: 'bg-amber-50 text-amber-700' },
   blocked: { title: 'Never used', tone: 'bg-slate-100 text-slate-500' },
+}
+
+const inputClass =
+  'w-full rounded-lg border border-slate-300 bg-surface px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-sky-400 focus:outline-none'
+
+// The last Salesforce app details entered on this browser (never the secret),
+// so teammates and reconnects don't retype them.
+const SF_KEY = 'agentis-salesforce-app'
+
+function savedSalesforceApp(): { login_url: string; client_id: string; server: string } {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SF_KEY) ?? '{}')
+    return { login_url: saved.login_url ?? '', client_id: saved.client_id ?? '', server: saved.server ?? 'sobject-all' }
+  } catch {
+    return { login_url: '', client_id: '', server: 'sobject-all' }
+  }
+}
+
+// Salesforce's hosted MCP servers only accept an app made in the same org, so
+// each company's admin creates one once; people then connect with its key.
+function SalesforceAppForm({
+  status,
+  busy,
+  onConnect,
+}: {
+  status: CrmProviderStatus
+  busy: boolean
+  onConnect: (details: { client_id: string; client_secret: string; login_url: string; server: string }) => void
+}) {
+  const [form, setForm] = useState(() => ({ ...savedSalesforceApp(), client_secret: '' }))
+  const [copied, setCopied] = useState(false)
+  const optionalKey = Boolean(status.server_app)
+  const servers = status.servers ?? { 'sobject-all': 'read and change records', 'sobject-reads': 'read records only' }
+
+  async function copyCallback() {
+    try {
+      await navigator.clipboard.writeText(status.callback_url ?? '')
+      setCopied(true)
+    } catch {
+      setCopied(false)
+    }
+  }
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault()
+        try {
+          localStorage.setItem(SF_KEY, JSON.stringify({ login_url: form.login_url, client_id: form.client_id, server: form.server }))
+        } catch {
+          // Private mode: nothing to remember.
+        }
+        onConnect(form)
+      }}
+      className="space-y-2.5"
+    >
+      <label className="block">
+        <span className="mb-1 block text-xs text-slate-500">Your Salesforce domain (Setup &rsaquo; My Domain)</span>
+        <input
+          value={form.login_url}
+          onChange={(e) => setForm({ ...form, login_url: e.target.value })}
+          placeholder="yourcompany.my.salesforce.com"
+          className={inputClass}
+        />
+      </label>
+      <label className="block">
+        <span className="mb-1 block text-xs text-slate-500">
+          Consumer key of your company&rsquo;s External Client App{optionalKey ? ' (blank: the server’s own app)' : ''}
+        </span>
+        <input
+          value={form.client_id}
+          required={!optionalKey}
+          onChange={(e) => setForm({ ...form, client_id: e.target.value })}
+          placeholder="3MVG9…"
+          className={`${inputClass} font-mono`}
+        />
+      </label>
+      <label className="block">
+        <span className="mb-1 block text-xs text-slate-500">Consumer secret (only if the app requires one)</span>
+        <input
+          type="password"
+          autoComplete="off"
+          value={form.client_secret}
+          onChange={(e) => setForm({ ...form, client_secret: e.target.value })}
+          className={inputClass}
+        />
+      </label>
+      <label className="block">
+        <span className="mb-1 block text-xs text-slate-500">MCP server your admin activated</span>
+        <select value={form.server} onChange={(e) => setForm({ ...form, server: e.target.value })} className={inputClass}>
+          {Object.entries(servers).map(([id, label]) => (
+            <option key={id} value={id}>
+              {id}: {label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <button
+        type="submit"
+        disabled={busy || (!optionalKey && !form.client_id.trim())}
+        className="rounded-full bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90 disabled:opacity-50"
+      >
+        {busy ? 'Opening Salesforce…' : 'Connect'}
+      </button>
+      <details className="rounded-lg bg-slate-50 px-3 py-2 text-xs leading-relaxed text-slate-600">
+        <summary className="cursor-pointer font-medium text-slate-700">First time? Your Salesforce admin sets this up once</summary>
+        <ol className="mt-2 list-decimal space-y-1.5 pl-4">
+          <li>
+            Setup &rsaquo; <b>MCP Servers</b>: activate <code>sobject-all</code> (or <code>sobject-reads</code> for read only).
+          </li>
+          <li>
+            Setup &rsaquo; <b>External Client App Manager</b> &rsaquo; New: turn on OAuth with this callback URL{' '}
+            <button type="button" onClick={() => void copyCallback()} className="font-medium text-sky-600 hover:underline">
+              {copied ? '(copied)' : '(copy)'}
+            </button>
+            <code className="mt-1 block break-all rounded bg-surface px-2 py-1 text-[11px] text-slate-700">{status.callback_url}</code>
+          </li>
+          <li>
+            Scopes: <b>mcp_api</b> (hosted MCP servers) and <b>refresh_token, offline_access</b>. Require PKCE, turn on JWT-based
+            access tokens for named users, and leave &ldquo;require secret&rdquo; off (then no secret is needed).
+          </li>
+          <li>Share the app&rsquo;s Consumer Key and your My Domain with your team; each person connects with them here.</li>
+        </ol>
+      </details>
+    </form>
+  )
 }
 
 // The controls inside a CRM card on the Connect page.
@@ -24,9 +150,9 @@ export default function CrmConnectControls({
   const [loadingTools, setLoadingTools] = useState(false)
   const busy = crm.busy === provider
 
-  async function connect() {
+  async function connect(details: Parameters<typeof crm.connect>[1] = {}) {
     setError(null)
-    const problem = await crm.connect(provider, provider === 'zoho' ? url.trim() : undefined)
+    const problem = await crm.connect(provider, provider === 'zoho' ? { mcp_url: url.trim() } : details)
     if (problem) setError(problem)
     else if (provider === 'zoho') setUrl('')
   }
@@ -78,6 +204,8 @@ export default function CrmConnectControls({
             </button>
           </span>
         </div>
+      ) : status.connect_with === 'app' ? (
+        <SalesforceAppForm status={status} busy={busy} onConnect={(details) => void connect(details)} />
       ) : status.connect_with === 'url' ? (
         <form
           onSubmit={(e) => {

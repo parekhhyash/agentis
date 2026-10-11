@@ -27,10 +27,11 @@ NOW = datetime(2026, 10, 10, 9, 0, tzinfo=timezone.utc)
 
 
 def settings(**overrides) -> Settings:
-    return Settings(
-        _env_file=None, integrations_encryption_key=KEY, hubspot_mcp_client_id="hub-id", hubspot_mcp_client_secret="hub-secret",
-        salesforce_mcp_client_id="sf-key", google_oauth_redirect_uri="https://api.example.com/integrations/google/callback", **overrides,
-    )
+    values = {
+        "integrations_encryption_key": KEY, "hubspot_mcp_client_id": "hub-id", "hubspot_mcp_client_secret": "hub-secret",
+        "salesforce_mcp_client_id": "sf-key", "google_oauth_redirect_uri": "https://api.example.com/integrations/google/callback",
+    }
+    return Settings(_env_file=None, **{**values, **overrides})
 
 
 @pytest.fixture
@@ -269,3 +270,160 @@ def test_general_routes_to_crm_only_with_a_connected_crm():
     assert routed.route == "crm" and "CONNECTED CRMS: HubSpot" in prompt
     not_connected, prompt = run([])
     assert not_connected.route == "none" and "CONNECTED CRMS: (none connected)" in prompt
+
+
+# --- Salesforce: each company's own External Client App ---------------------------
+
+KEY_85 = "3MVG9" + "A" * 80
+
+
+@pytest.mark.parametrize("login,ok,host", [
+    ("https://acme.my.salesforce.com", True, "acme.my.salesforce.com"),
+    ("acme--uat.sandbox.my.salesforce.com", True, "acme--uat.sandbox.my.salesforce.com"),
+    ("https://yash-dev-ed.develop.my.salesforce.com/", True, "yash-dev-ed.develop.my.salesforce.com"),
+    ("", True, "login.salesforce.com"),
+    ("https://test.salesforce.com", True, "test.salesforce.com"),
+    ("http://acme.my.salesforce.com", False, None),
+    ("https://acme.my.salesforce.com.evil.io", False, None),
+    ("https://evil.io/acme.my.salesforce.com", False, None),
+    ("https://acme.my.salesforce.com:8443", False, None),
+    ("https://salesforce.com", False, None),
+])
+def test_salesforce_company_app_domains(login, ok, host):
+    from integrations.crm.providers import check_salesforce_app
+
+    if ok:
+        app = check_salesforce_app(f"  {KEY_85} ", "", login, None)
+        assert app.login_url == f"https://{host}" and app.client_id == KEY_85 and app.client_secret is None
+    else:
+        with pytest.raises(CrmError) as err:
+            check_salesforce_app(KEY_85, None, login, None)
+        assert err.value.status == 422
+
+
+def test_salesforce_app_picks_the_server_and_sandbox_path():
+    from integrations.crm.providers import check_salesforce_app
+
+    prod = check_salesforce_app(KEY_85, "shh", "acme.my.salesforce.com", "sobject-reads")
+    assert prod.mcp_url == "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads"
+    sandbox = check_salesforce_app(KEY_85, None, "acme--uat.sandbox.my.salesforce.com", None)
+    assert sandbox.mcp_url == "https://api.salesforce.com/platform/mcp/v1/sandbox/platform/sobject-all"
+    config = oauth_provider("salesforce", settings(salesforce_mcp_client_id=None), prod)
+    assert config.authorize_url == "https://acme.my.salesforce.com/services/oauth2/authorize"
+    assert config.client_id == KEY_85 and config.client_secret == "shh"
+    for bad in [("short", None, None, None), (KEY_85, None, None, "sobject-deletes")]:
+        with pytest.raises(CrmError):
+            check_salesforce_app(*bad)
+    with pytest.raises(CrmError) as missing:
+        oauth_provider("salesforce", settings(salesforce_mcp_client_id=None))
+    assert missing.value.status == 400
+
+
+def test_salesforce_connects_with_the_company_app_end_to_end(monkeypatch):
+    import main
+    from api import crm as crm_api
+    from fastapi.testclient import TestClient
+    from services import auth
+
+    s = settings(salesforce_mcp_client_id=None, frontend_url="https://app.example.com")
+    monkeypatch.setattr(crm_api, "get_settings", lambda: s)
+    saved: dict[str, Any] = {}
+    exchanged: list[str] = []
+
+    async def exchange(config, code, verifier, redirect, client):
+        exchanged.append(config.token_url)
+        return oauth.TokenGrant("acc", "ref", 3600, {"instance_url": "https://acme.my.salesforce.com"})
+
+    class FakeConnection:
+        async def tools(self):
+            return [1, 2, 3]
+
+    class FakeOpen:
+        def __init__(self, url, **kwargs):
+            saved["mcp_url_opened"] = url
+
+        async def __aenter__(self):
+            return FakeConnection()
+
+        async def __aexit__(self, *exc):
+            return False
+
+    async def save(user_id, provider, **kwargs):
+        saved.update(kwargs, user_id=user_id)
+
+    monkeypatch.setattr(crm_api.oauth, "exchange_code", exchange)
+    monkeypatch.setattr(crm_api, "open_connection", FakeOpen)
+    monkeypatch.setattr(crm_api.connections, "save_connection", save)
+    monkeypatch.setattr(crm_api.connections, "remember_token", lambda *a: None)
+    main.app.dependency_overrides[auth.current_user] = lambda: USER
+    try:
+        client = TestClient(main.app)
+        bad = client.post("/integrations/crm/salesforce/connect", json={"client_id": KEY_85, "login_url": "https://evil.io"})
+        assert bad.status_code == 422
+        started = client.post("/integrations/crm/salesforce/connect", json={
+            "client_id": KEY_85, "client_secret": "shh", "login_url": "acme.my.salesforce.com", "server": "sobject-reads",
+        })
+        assert started.status_code == 200
+        url = urlparse(started.json()["url"])
+        params = parse_qs(url.query)
+        assert url.netloc == "acme.my.salesforce.com" and params["client_id"] == [KEY_85]
+        assert "shh" not in started.json()["url"]  # the secret only travels encrypted in the state
+        done = client.get("/integrations/crm/callback", params={"code": "c", "state": params["state"][0]}, follow_redirects=False)
+        assert done.status_code == 302 and "crm=connected" in done.headers["location"]
+    finally:
+        main.app.dependency_overrides.clear()
+    assert exchanged == ["https://acme.my.salesforce.com/services/oauth2/token"]
+    assert saved["mcp_url_opened"] == "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads"
+    assert saved["app"].client_secret == "shh" and saved["account_label"] == "acme.my.salesforce.com"
+
+
+def test_salesforce_refresh_uses_the_stored_company_app(monkeypatch):
+    from integrations.crm.providers import check_salesforce_app
+
+    monkeypatch.setattr(connections, "get_settings", lambda: settings(salesforce_mcp_client_id=None))
+    app = check_salesforce_app(KEY_85, "shh", "acme.my.salesforce.com", "sobject-reads")
+    row = {
+        "provider": "salesforce", "client_id": app.client_id, "login_url": app.login_url,
+        "client_secret_encrypted": connections._encrypt("shh"), "mcp_url_encrypted": connections._encrypt(app.mcp_url),
+        "refresh_token_encrypted": connections._encrypt("ref"),
+    }
+    assert connections.app_from_row("salesforce", row) == app
+    assert connections.app_from_row("hubspot", row) is None
+    used: list[tuple[str, str | None]] = []
+
+    async def refresh(config, token, client):
+        used.append((config.token_url, config.client_secret))
+        return oauth.TokenGrant("fresh", None, 3600, {})
+
+    monkeypatch.setattr(connections.oauth, "refresh", refresh)
+    token = asyncio.run(connections._access_token("u-sf", "salesforce", row, force=True))
+    assert token == "fresh" and used == [("https://acme.my.salesforce.com/services/oauth2/token", "shh")]
+
+
+# --- HubSpot: sign-in endpoints from the server's metadata ------------------------
+
+def test_hubspot_endpoints_come_from_its_metadata_when_on_hubspot_hosts(monkeypatch):
+    monkeypatch.setattr(oauth, "_discovered", {})
+    answers = iter([
+        {"authorization_endpoint": "https://evil.io/authorize", "token_endpoint": "https://mcp.hubspot.com/oauth/v3/token"},
+        {"authorization_endpoint": "https://mcp.hubspot.com/oauth/authorize/user", "token_endpoint": "https://mcp.hubspot.com/oauth/v3/token"},
+    ])
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/.well-known/oauth-authorization-server"
+        return httpx.Response(200, json=next(answers))
+
+    base = oauth_provider("hubspot", settings(hubspot_mcp_authorize_url="https://mcp.hubspot.com/old"))
+
+    async def go():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            first = await oauth.with_server_endpoints(base, client)
+            second = await oauth.with_server_endpoints(base, client)
+            third = await oauth.with_server_endpoints(base, client)  # cached, no request
+            return first, second, third
+
+    first, second, third = asyncio.run(go())
+    assert first.authorize_url == "https://mcp.hubspot.com/old"  # a foreign host is ignored
+    assert second.authorize_url == third.authorize_url == "https://mcp.hubspot.com/oauth/authorize/user"
+    salesforce = oauth_provider("salesforce", settings())
+    assert asyncio.run(oauth.with_server_endpoints(salesforce, None)) is salesforce  # type: ignore[arg-type]

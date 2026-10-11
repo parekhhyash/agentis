@@ -29,11 +29,26 @@ GMAIL_SEND = "https://www.googleapis.com/auth/gmail.send"
 GMAIL_READ = "https://www.googleapis.com/auth/gmail.readonly"
 CALENDAR_EVENTS = "https://www.googleapis.com/auth/calendar.events"
 
+SHEETS_READ = "https://www.googleapis.com/auth/spreadsheets.readonly"
+DRIVE_FILE = "https://www.googleapis.com/auth/drive.file"
+
 # gmail.readonly is only used to find and read the threads the user asks to
 # reply to; calendar.events covers creating events (with Meet links) and
 # reading the user's own events for conflict checks.
 SCOPES = ["openid", "email", GMAIL_SEND, GMAIL_READ, CALENDAR_EVENTS]
 REQUIRED_SCOPES = {GMAIL_SEND, GMAIL_READ, CALENDAR_EVENTS}
+# Google Sheets, asked for separately (incremental sign-in): read the sheets
+# a user links, and create new ones (drive.file reaches only files Agentis made).
+SHEETS_SCOPES = ["openid", "email", SHEETS_READ, DRIVE_FILE]
+REQUIRED_SHEETS_SCOPES = {SHEETS_READ, DRIVE_FILE}
+
+
+def has_gmail(scopes: list[str]) -> bool:
+    return REQUIRED_SCOPES <= set(scopes)
+
+
+def has_sheets(scopes: list[str]) -> bool:
+    return REQUIRED_SHEETS_SCOPES <= set(scopes)
 
 STATE_TTL_SECONDS = 600
 
@@ -72,8 +87,11 @@ def _state_key(secret_key: str) -> bytes:
     return hashlib.sha256(b"agentis-oauth-state:" + secret_key.encode()).digest()
 
 
-def sign_state(user_id: str, secret_key: str, now: float | None = None) -> str:
+def sign_state(user_id: str, secret_key: str, now: float | None = None, purpose: str = "") -> str:
+    """`purpose` is "sheets" for the Google Sheets sign-in, else Gmail and Calendar."""
     payload = {"u": user_id, "n": secrets.token_urlsafe(12), "e": int((now or time.time()) + STATE_TTL_SECONDS)}
+    if purpose:
+        payload["p"] = purpose
     body = _b64(json.dumps(payload, separators=(",", ":")).encode())
     sig = _b64(hmac.new(_state_key(secret_key), body.encode(), hashlib.sha256).digest())
     return f"{body}.{sig}"
@@ -81,6 +99,11 @@ def sign_state(user_id: str, secret_key: str, now: float | None = None) -> str:
 
 def verify_state(state: str, secret_key: str, now: float | None = None) -> str:
     """Returns the user id the state was issued for, or raises."""
+    return str(read_state(state, secret_key, now)["u"])
+
+
+def read_state(state: str, secret_key: str, now: float | None = None) -> dict[str, Any]:
+    """The state's payload (user id, and purpose if any), or raises."""
     try:
         body, sig = state.split(".", 1)
     except ValueError:
@@ -94,15 +117,15 @@ def verify_state(state: str, secret_key: str, now: float | None = None) -> str:
         raise GoogleIntegrationError("Invalid sign-in state") from None
     if not isinstance(payload, dict) or not payload.get("u") or int(payload.get("e", 0)) < (now or time.time()):
         raise GoogleIntegrationError("The Google sign-in took too long, try connecting again")
-    return str(payload["u"])
+    return payload
 
 
-def build_auth_url(config: OAuthConfig, state: str, login_hint: str | None = None) -> str:
+def build_auth_url(config: OAuthConfig, state: str, login_hint: str | None = None, scopes: list[str] | None = None) -> str:
     params = {
         "client_id": config.client_id,
         "redirect_uri": config.redirect_uri,
         "response_type": "code",
-        "scope": " ".join(SCOPES),
+        "scope": " ".join(scopes or SCOPES),
         "access_type": "offline",
         # Always show consent so Google returns a refresh token even if the
         # user connected before.

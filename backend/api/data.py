@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from agents.data_reporting import DataReportResult
 from api.models import CompanyContext
 from services.auth import AuthUser, current_user
-from services.data_runner import OutreachError, run_data_report, save_upload
+from services.data_runner import OutreachError, add_sheet, refresh_sheet, run_data_report, save_upload
 
 router = APIRouter(prefix="/data", tags=["data"])
 
@@ -42,5 +42,26 @@ async def run(body: DataRunRequest, user: AuthUser = Depends(current_user)) -> D
 async def upload(body: UploadRequest, user: AuthUser = Depends(current_user)) -> dict[str, Any]:
     try:
         return await save_upload(user, body.filename, body.content_base64)
+    except OutreachError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+
+
+class SheetRequest(BaseModel):
+    url: str = Field(min_length=1, max_length=2000)
+
+
+@router.post("/sheets")
+async def link_sheet(body: SheetRequest, user: AuthUser = Depends(current_user)) -> dict[str, Any]:
+    """Adds one tab of a Google Sheet as a data file."""
+    try:
+        return await add_sheet(user, body.url)
+    except OutreachError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+
+
+@router.post("/sheets/{dataset_id}/refresh")
+async def refresh(dataset_id: str, user: AuthUser = Depends(current_user)) -> dict[str, Any]:
+    try:
+        return await refresh_sheet(user.id, dataset_id)
     except OutreachError as exc:
         raise HTTPException(status_code=exc.status, detail=str(exc)) from exc

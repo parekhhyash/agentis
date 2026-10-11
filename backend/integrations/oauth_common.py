@@ -22,8 +22,10 @@ def pkce_pair() -> tuple[str, str]:
     return verifier, challenge
 
 
-def seal_state(fernet: Fernet, user_id: str, provider: str, verifier: str = "") -> str:
-    payload = {"u": user_id, "p": provider, "v": verifier, "n": secrets.token_urlsafe(8)}
+def seal_state(fernet: Fernet, user_id: str, provider: str, verifier: str = "", extra: dict[str, str] | None = None) -> str:
+    """`extra` carries per-sign-in details the callback needs (like a
+    company's own Salesforce app); it's encrypted with the rest."""
+    payload = {**(extra or {}), "u": user_id, "p": provider, "v": verifier, "n": secrets.token_urlsafe(8)}
     return fernet.encrypt(json.dumps(payload, separators=(",", ":")).encode()).decode()
 
 

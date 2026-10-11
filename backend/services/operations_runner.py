@@ -124,7 +124,7 @@ async def run_operations(
             now=_now(),
             time_zone=valid_time_zone(time_zone),
             tasks=tasks,
-            google_email=google.email if google else None,
+            google_email=google.email if google and google.gmail else None,
             crms=[CRM_NAMES[p] for p in crms],
             max_tasks=settings.operations_max_tasks,
         )

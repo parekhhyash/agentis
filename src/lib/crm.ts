@@ -14,7 +14,22 @@ export interface CrmProviderStatus {
   account: string | null
   tool_count: number | null
   connected_at: string | null
-  connect_with: 'oauth' | 'url'
+  // oauth: Agentis's own app; app: the company's own Salesforce app; url: Zoho's MCP URL.
+  connect_with: 'oauth' | 'app' | 'url'
+  // Salesforce: what the company's admin needs, and the app last used.
+  callback_url?: string
+  servers?: Record<string, string>
+  server_app?: boolean
+  app?: { client_id: string; login_url: string } | null
+}
+
+// Zoho's MCP URL, or a company's Salesforce External Client App.
+export interface CrmConnectDetails {
+  mcp_url?: string
+  client_id?: string
+  client_secret?: string
+  login_url?: string
+  server?: string
 }
 
 export interface CrmTool {
@@ -93,14 +108,14 @@ export function useCrmConnections(enabled = true) {
     }
   }, [enabled])
 
-  // HubSpot and Salesforce: off to the CRM's sign-in page. Zoho: the MCP URL
-  // is checked and saved right away.
-  async function connect(provider: CrmProvider, mcpUrl?: string): Promise<string | null> {
+  // HubSpot and Salesforce: off to the CRM's sign-in page (Salesforce with the
+  // company's own app). Zoho: the MCP URL is checked and saved right away.
+  async function connect(provider: CrmProvider, details: CrmConnectDetails = {}): Promise<string | null> {
     setBusy(provider)
     try {
       const out = await authedFetch<{ url?: string }>(`/integrations/crm/${provider}/connect`, {
         method: 'POST',
-        body: JSON.stringify({ mcp_url: mcpUrl ?? null }),
+        body: JSON.stringify(details),
       })
       if (out.url) {
         window.location.href = out.url

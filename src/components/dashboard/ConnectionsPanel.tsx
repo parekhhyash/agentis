@@ -11,21 +11,75 @@ import SocialConnectControls from './SocialConnectControls'
 const CRM_IDS = new Set<string>(['hubspot', 'salesforce', 'zoho'])
 const SOCIAL_IDS = new Set<string>(['linkedin', 'x', 'notion', 'medium'])
 
-// The app's own logo on a white tile (white in dark mode too, so dark marks
-// like X's and Notion's stay visible). A pair overlaps, the second in front.
+// The app's own logo: on a white tile, or a black one in dark mode, where
+// black marks (X, Notion, Medium) turn white. A pair overlaps, the second in front.
 function Tile({ connector }: { connector: ConnectorInfo }) {
   const [first, second] = connector.logos
+  const mark = connector.monochrome ? 'dark:invert' : ''
   return (
-    <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white ring-1 ring-slate-200">
+    <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white ring-1 ring-slate-200 dark:bg-black">
       {second ? (
         <>
           <img src={first} alt="" className="absolute top-2 left-1.5 h-[18px] w-[22px] object-contain" />
-          <img src={second} alt="" className="absolute right-1.5 bottom-1.5 h-[18px] w-[18px] rounded-sm object-contain ring-2 ring-white" />
+          <img
+            src={second}
+            alt=""
+            className="absolute right-1.5 bottom-1.5 h-[18px] w-[18px] rounded-sm object-contain ring-2 ring-white dark:ring-black"
+          />
         </>
       ) : (
-        <img src={first} alt="" className={`object-contain ${connector.id === 'zoho' ? 'w-9' : 'h-7 w-7'}`} />
+        <img src={first} alt="" className={`object-contain ${connector.id === 'zoho' ? 'w-9' : 'h-7 w-7'} ${mark}`} />
       )}
     </span>
+  )
+}
+
+// Google Sheets rides on the Google connection: its own permission, the same
+// Google account (and one Disconnect for both).
+function SheetsControls({
+  status,
+  error,
+  sheets,
+  onDisconnect,
+}: {
+  status: GoogleStatus | null
+  error: string | null
+  sheets: { connected: boolean; busy: boolean; connect: () => void }
+  onDisconnect: () => void
+}) {
+  if (!status) return <p className="text-sm text-slate-400">{error ?? 'Checking…'}</p>
+  if (!status.configured) return <p className="text-sm text-amber-700">Not set up on the server yet.</p>
+  if (sheets.connected)
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="flex min-w-0 items-center gap-2 text-sm text-slate-600">
+          <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
+          <span className="truncate">{status.email}</span>
+        </span>
+        {!status.connected && (
+          <button
+            type="button"
+            onClick={onDisconnect}
+            disabled={sheets.busy}
+            className="rounded-full px-3 py-1.5 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-100 disabled:opacity-50"
+          >
+            Disconnect
+          </button>
+        )}
+      </div>
+    )
+  return (
+    <div className="space-y-1.5">
+      <button
+        type="button"
+        onClick={sheets.connect}
+        disabled={sheets.busy}
+        className="rounded-full bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90 disabled:opacity-50"
+      >
+        {sheets.busy ? 'Opening Google…' : 'Connect'}
+      </button>
+      {status.email && <p className="text-xs text-slate-500">Uses your Google account {status.email}.</p>}
+    </div>
   )
 }
 
@@ -55,7 +109,7 @@ export default function ConnectionsPanel({
     status: GoogleStatus | null
     error: string | null
     busy: boolean
-    connect: () => void
+    connect: (sheets?: unknown) => void
     disconnect: () => void
   }
   crm: ReturnType<typeof useCrmConnections>
@@ -64,6 +118,12 @@ export default function ConnectionsPanel({
 }) {
   const [googleConnector, ...others] = CONNECTORS
   const status = google.status
+  const sheets = {
+    configured: Boolean(status?.configured),
+    connected: Boolean(status?.sheets),
+    busy: google.busy,
+    connect: () => google.connect(true),
+  }
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
@@ -91,6 +151,7 @@ export default function ConnectionsPanel({
                 type="button"
                 onClick={google.disconnect}
                 disabled={google.busy}
+                title={status.sheets ? 'Disconnects your Google account, Google Sheets included' : undefined}
                 className="rounded-full px-3 py-1.5 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-100 disabled:opacity-50"
               >
                 Disconnect
@@ -99,7 +160,7 @@ export default function ConnectionsPanel({
           ) : (
             <button
               type="button"
-              onClick={google.connect}
+              onClick={() => google.connect()}
               disabled={google.busy}
               className="rounded-full bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90 disabled:opacity-50"
             >
@@ -110,7 +171,9 @@ export default function ConnectionsPanel({
 
         {others.map((connector) => (
           <Card key={connector.id} connector={connector}>
-            {CRM_IDS.has(connector.id) ? (
+            {connector.id === 'sheets' ? (
+              <SheetsControls status={status} error={google.error} sheets={sheets} onDisconnect={google.disconnect} />
+            ) : CRM_IDS.has(connector.id) ? (
               <CrmConnectControls provider={connector.id as CrmProvider} crm={crm} />
             ) : SOCIAL_IDS.has(connector.id) ? (
               <SocialConnectControls provider={connector.id as SocialProvider} social={social} />
@@ -123,7 +186,7 @@ export default function ConnectionsPanel({
         ))}
       </div>
 
-      <DataFilesPanel />
+      <DataFilesPanel sheets={sheets} />
     </div>
   )
 }

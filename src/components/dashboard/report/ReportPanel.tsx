@@ -1,7 +1,8 @@
 import { useState } from 'react'
 
 import type { DataReportResult, ReportBlock } from '../../../lib/dataTypes'
-import { downloadCsv } from '../../../lib/reportFormat'
+import { blockTable, downloadCsv } from '../../../lib/reportFormat'
+import SheetsExportButton from '../SheetsExportButton'
 import { relativeTime } from '../../../lib/relativeTime'
 import RichText from '../RichText'
 import { BarList, DataTable, Donut, LineChart, StatTiles } from './ReportCharts'
@@ -21,7 +22,7 @@ function Chart({ block }: { block: ReportBlock }) {
   return <DataTable block={block} />
 }
 
-function BlockCard({ block }: { block: ReportBlock }) {
+function BlockCard({ block, sheetsConnected }: { block: ReportBlock; sheetsConnected: boolean }) {
   const [view, setView] = useState<'chart' | 'table'>('chart')
   const [explain, setExplain] = useState(false)
   const isChart = block.visual !== 'table'
@@ -56,6 +57,9 @@ function BlockCard({ block }: { block: ReportBlock }) {
           <button type="button" onClick={() => downloadCsv(block)} className="font-medium hover:text-slate-800">
             Download CSV
           </button>
+        )}
+        {block.rows.length > 0 && sheetsConnected && (
+          <SheetsExportButton table={() => blockTable(block)} className="font-medium hover:text-slate-800" />
         )}
       </div>
       {explain && <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs leading-relaxed text-slate-600">{block.explanation}</p>}
@@ -98,7 +102,7 @@ function Tiles({ blocks }: { blocks: ReportBlock[] }) {
   )
 }
 
-export default function ReportPanel({ result }: { result: DataReportResult }) {
+export default function ReportPanel({ result, sheetsConnected = false }: { result: DataReportResult; sheetsConnected?: boolean }) {
   const uploads = result.datasets.filter((d) => d.kind === 'upload')
   const activity = result.datasets.filter((d) => d.kind === 'activity')
 
@@ -112,7 +116,11 @@ export default function ReportPanel({ result }: { result: DataReportResult }) {
       </div>
 
       {groupBlocks(result.blocks).map((item) =>
-        Array.isArray(item) ? <Tiles key={item[0].id} blocks={item} /> : <BlockCard key={item.id} block={item} />,
+        Array.isArray(item) ? (
+          <Tiles key={item[0].id} blocks={item} />
+        ) : (
+          <BlockCard key={item.id} block={item} sheetsConnected={sheetsConnected} />
+        ),
       )}
 
       {result.notes.length > 0 && (

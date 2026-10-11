@@ -49,6 +49,7 @@ services:
         sync: false
       - key: HUBSPOT_MCP_CLIENT_SECRET
         sync: false
+      # Salesforce: optional default app (each company normally enters its own on the Connect page).
       - key: SALESFORCE_MCP_CLIENT_ID
         sync: false
       - key: SALESFORCE_MCP_CLIENT_SECRET

@@ -1,10 +1,11 @@
 """OAuth 2.0 authorization code flow with PKCE for CRM MCP servers. The
 PKCE verifier travels encrypted in `state` (see integrations/oauth_common.py)."""
 
+import dataclasses
 import time
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 import httpx
 from cryptography.fernet import Fernet
@@ -31,8 +32,8 @@ def fernet(secret_key: str) -> Fernet:
 pkce_pair = oauth_common.pkce_pair
 
 
-def make_state(secret_key: str, user_id: str, provider: str, verifier: str) -> str:
-    return oauth_common.seal_state(fernet(secret_key), user_id, provider, verifier)
+def make_state(secret_key: str, user_id: str, provider: str, verifier: str, extra: dict[str, str] | None = None) -> str:
+    return oauth_common.seal_state(fernet(secret_key), user_id, provider, verifier, extra)
 
 
 def read_state(secret_key: str, state: str) -> dict[str, str]:
@@ -40,6 +41,38 @@ def read_state(secret_key: str, state: str) -> dict[str, str]:
         return oauth_common.open_state(fernet(secret_key), state)
     except oauth_common.StateError as exc:
         raise CrmError(str(exc), 400) from None
+
+
+# HubSpot publishes its sign-in endpoints (RFC 8414 metadata); they're used
+# when they point at HubSpot's own hosts, else the configured ones.
+DISCOVERY_TTL_SECONDS = 86400.0
+_discovered: dict[str, tuple[str, str, float]] = {}
+
+
+def _hubspot_host(url: str) -> bool:
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower()
+    return parsed.scheme == "https" and (host in ("hubspot.com", "hubapi.com") or host.endswith((".hubspot.com", ".hubapi.com")))
+
+
+async def with_server_endpoints(provider: OAuthProvider, client: httpx.AsyncClient) -> OAuthProvider:
+    if provider.id != "hubspot":
+        return provider
+    parsed = urlparse(provider.mcp_url)
+    origin = f"{parsed.scheme}://{parsed.netloc}"
+    cached = _discovered.get(origin)
+    if not cached or cached[2] < time.time():
+        try:
+            response = await client.get(f"{origin}/.well-known/oauth-authorization-server", timeout=5.0)
+            data = response.json() if response.status_code == 200 else {}
+        except (httpx.HTTPError, ValueError):
+            data = {}
+        authorize, token = str(data.get("authorization_endpoint") or ""), str(data.get("token_endpoint") or "")
+        if not (_hubspot_host(authorize) and _hubspot_host(token)):
+            return provider
+        cached = (authorize, token, time.time() + DISCOVERY_TTL_SECONDS)
+        _discovered[origin] = cached
+    return dataclasses.replace(provider, authorize_url=cached[0], token_url=cached[1])
 
 
 def authorize_url(provider: OAuthProvider, redirect_uri: str, state: str, challenge: str) -> str:

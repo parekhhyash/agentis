@@ -71,4 +71,9 @@ export interface DatasetSummary {
   row_count: number
   size_bytes: number
   created_at: string
+  // Older rows have none of these (uploads).
+  source?: 'upload' | 'google_sheets'
+  source_url?: string | null
+  source_tab?: string | null
+  refreshed_at?: string | null
 }

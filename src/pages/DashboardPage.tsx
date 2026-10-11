@@ -55,7 +55,8 @@ export default function DashboardPage() {
   const [notice, setNotice] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
   const [view, setView] = useState<'chat' | 'connect' | 'scheduled'>('chat')
-  const google = useGoogleConnection(agentType === 'sales_outreach' || view === 'connect')
+  // Always checked: chats offer "Export to Google Sheets" when Sheets is connected.
+  const google = useGoogleConnection(true)
   const crm = useCrmConnections()
   const social = useSocialConnections()
   const scheduled = useScheduledTasks()
@@ -64,14 +65,17 @@ export default function DashboardPage() {
   const googleResult = searchParams.get('google')
   const returnMessage = searchParams.get('message')
   const [handledGoogleResult, setHandledGoogleResult] = useState<string | null>(null)
+  const forSheets = searchParams.get('for') === 'sheets'
   if (googleResult && googleResult !== handledGoogleResult) {
     setHandledGoogleResult(googleResult)
-    setAgentType('sales_outreach')
+    if (!forSheets) setAgentType('sales_outreach')
     setView('connect')
     setNotice(
-      googleResult === 'connected'
-        ? { tone: 'ok', text: 'Google connected. Sales & Outreach can now draft email and meetings for you.' }
-        : { tone: 'error', text: returnMessage ?? 'Google could not be connected.' },
+      googleResult !== 'connected'
+        ? { tone: 'error', text: returnMessage ?? 'Google could not be connected.' }
+        : forSheets
+          ? { tone: 'ok', text: 'Google Sheets connected. Add a sheet under Data files, or export leads and report tables to Sheets.' }
+          : { tone: 'ok', text: 'Google connected. Sales & Outreach can now draft email and meetings for you.' },
     )
   }
   // Back from a CRM's sign-in page (see api/crm.py's callback).
@@ -507,6 +511,7 @@ export default function DashboardPage() {
                   scheduled={scheduled}
                   onOpenChat={(id) => void openChat(id)}
                   onOpenScheduled={openScheduled}
+                  sheetsConnected={Boolean(google.status?.sheets)}
                   onAddLeadsToCrm={(name, count) =>
                     void handleSubmit(
                       `Add the ${count} lead${count === 1 ? '' : 's'} from my last research to ${name}: create each company and its contacts with their emails, and skip any that are already in ${name}.`,

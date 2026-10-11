@@ -27,8 +27,8 @@ function csvCell(value: string | null | undefined): string {
 
 // One row per contact (like the on-screen table); companies without a
 // contact still get a row so nothing drops out of the export.
-export function leadsToCsv(result: LeadResearchResult): string {
-  const rows: string[][] = [COLUMNS]
+export function leadRows(result: LeadResearchResult): string[][] {
+  const rows: string[][] = []
   for (const lead of result.leads) {
     const company = [
       lead.company_name,
@@ -55,7 +55,17 @@ export function leadsToCsv(result: LeadResearchResult): string {
       ])
     }
   }
-  return rows.map((row) => row.map(csvCell).join(',')).join('\r\n')
+  return rows
+}
+
+export function leadsToCsv(result: LeadResearchResult): string {
+  return [COLUMNS, ...leadRows(result)].map((row) => row.map(csvCell).join(',')).join('\r\n')
+}
+
+// The same rows for a new Google Sheet.
+export function leadsTable(result: LeadResearchResult) {
+  const date = new Date().toISOString().slice(0, 10)
+  return { title: `Leads ${date}${result.icp.summary ? ` · ${result.icp.summary}` : ''}`.slice(0, 200), tab: 'Leads', headers: COLUMNS, rows: leadRows(result) }
 }
 
 export function downloadLeadsCsv(result: LeadResearchResult): void {

@@ -2,10 +2,11 @@
 the CRM changes agents draft.
 
 HubSpot / Salesforce: POST /integrations/crm/{provider}/connect returns the
-CRM's sign-in URL; the CRM redirects to /integrations/crm/callback, which
-stores the grant (after checking the MCP server answers with it) and sends
-the browser back to the dashboard. Zoho: the same POST takes the MCP server
-URL from Zoho CRM and checks it right away.
+CRM's sign-in URL (for Salesforce, made from the company's own External
+Client App, sent in the same request); the CRM redirects to
+/integrations/crm/callback, which stores the grant (after checking the MCP
+server answers with it) and sends the browser back to the dashboard. Zoho:
+the same POST takes the MCP server URL from Zoho CRM and checks it right away.
 """
 
 import logging
@@ -19,7 +20,19 @@ from pydantic import BaseModel, Field
 
 from config.settings import get_settings
 from integrations.crm import connections, oauth
-from integrations.crm.providers import NAMES, PROVIDERS, CrmError, check_zoho_url, is_configured, oauth_provider, redirect_uri
+from integrations.crm.providers import (
+    NAMES,
+    PROVIDERS,
+    SALESFORCE_SERVERS,
+    CrmError,
+    SalesforceApp,
+    check_salesforce_app,
+    check_zoho_url,
+    default_salesforce_app,
+    is_configured,
+    oauth_provider,
+    redirect_uri,
+)
 from integrations.mcp.client import McpError, open_connection
 from services import supabase_rest
 from services.auth import AuthUser, current_user
@@ -32,7 +45,23 @@ actions_router = APIRouter(prefix="/crm", tags=["crm"])
 
 
 class ConnectRequest(BaseModel):
+    # Zoho: the MCP server URL from Zoho CRM.
     mcp_url: str | None = Field(default=None, max_length=2000)
+    # Salesforce: the company's External Client App and org.
+    client_id: str | None = Field(default=None, max_length=300)
+    client_secret: str | None = Field(default=None, max_length=300)
+    login_url: str | None = Field(default=None, max_length=300)
+    server: str | None = Field(default=None, max_length=40)
+
+
+def _app_state(app: SalesforceApp) -> dict[str, str]:
+    return {"c": app.client_id, "s": app.client_secret or "", "l": app.login_url, "m": app.server}
+
+
+def _app_from_state(payload: dict[str, Any]) -> SalesforceApp | None:
+    if not payload.get("c"):
+        return None
+    return check_salesforce_app(payload["c"], payload.get("s"), payload.get("l"), payload.get("m"))
 
 
 class ActionDecision(BaseModel):
@@ -66,7 +95,7 @@ async def crm_status(user: AuthUser = Depends(current_user)) -> dict[str, Any]:
     out = []
     for provider in PROVIDERS:
         connection = connected.get(provider)
-        out.append({
+        item = {
             "provider": provider,
             "name": NAMES[provider],
             "configured": is_configured(provider, settings),
@@ -74,8 +103,16 @@ async def crm_status(user: AuthUser = Depends(current_user)) -> dict[str, Any]:
             "account": connection.account_label if connection else None,
             "tool_count": connection.tool_count if connection else None,
             "connected_at": connection.connected_at if connection else None,
-            "connect_with": "url" if provider == "zoho" else "oauth",
-        })
+            "connect_with": {"zoho": "url", "salesforce": "app"}.get(provider, "oauth"),
+        }
+        if provider == "salesforce":
+            # What the company's admin needs to create their app, and the
+            # app this user last signed in with.
+            item["callback_url"] = redirect_uri(settings)
+            item["servers"] = SALESFORCE_SERVERS
+            item["server_app"] = default_salesforce_app(settings) is not None
+            item["app"] = connection.app if connection else None
+        out.append(item)
     return {"providers": out}
 
 
@@ -99,9 +136,14 @@ async def crm_connect(provider: str, body: ConnectRequest, user: AuthUser = Depe
             )
             return {"connected": True, "tool_count": len(tools)}
 
-        config = oauth_provider(provider, settings)
+        app = None
+        if provider == "salesforce" and (body.client_id or not default_salesforce_app(settings)):
+            app = check_salesforce_app(body.client_id, body.client_secret, body.login_url, body.server)
+        config = oauth_provider(provider, settings, app)
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            config = await oauth.with_server_endpoints(config, client)
         verifier, challenge = oauth.pkce_pair()
-        state = oauth.make_state(settings.integrations_encryption_key, user.id, provider, verifier)
+        state = oauth.make_state(settings.integrations_encryption_key, user.id, provider, verifier, _app_state(app) if app else None)
         return {"url": oauth.authorize_url(config, redirect_uri(settings), state, challenge)}
     except CrmError as exc:
         raise _http(exc) from exc
@@ -123,8 +165,10 @@ async def crm_callback(code: str | None = None, state: str | None = None, error:
     if not code:
         return _back_to_app(provider, "error", f"{NAMES[provider]} didn't send a sign-in code")
     try:
-        config = oauth_provider(provider, settings)
+        app = _app_from_state(payload) if provider == "salesforce" else None
+        config = oauth_provider(provider, settings, app)
         async with httpx.AsyncClient(timeout=20.0) as client:
+            config = await oauth.with_server_endpoints(config, client)
             grant = await oauth.exchange_code(config, code, payload["v"], redirect_uri(settings), client)
         if not grant.refresh_token:
             raise CrmError(
@@ -136,11 +180,15 @@ async def crm_callback(code: str | None = None, state: str | None = None, error:
             async with open_connection(config.mcp_url, bearer=grant.access_token, server=NAMES[provider]) as connection:
                 tools = await connection.tools()
         except McpError as exc:
-            hint = " Check that the hosted MCP server is activated in Salesforce Setup." if provider == "salesforce" else ""
+            hint = (
+                " Check that your Salesforce admin activated the hosted MCP server in Setup > MCP Servers and turned on"
+                " JWT-based access tokens in the External Client App."
+                if provider == "salesforce" else ""
+            )
             raise CrmError(f"Signed in, but the {NAMES[provider]} MCP server didn't answer: {exc}.{hint}", 502) from exc
         await connections.save_connection(
             user_id, provider, mcp_url=config.mcp_url, refresh_token=grant.refresh_token,
-            account_label=oauth.account_label(provider, grant), tool_count=len(tools),
+            account_label=oauth.account_label(provider, grant), tool_count=len(tools), app=app,
         )
         connections.remember_token(user_id, provider, grant)
     except CrmError as exc:

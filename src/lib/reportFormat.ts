@@ -71,6 +71,16 @@ export function blockToCsv(block: ReportBlock): string {
   return [header, ...block.rows.map((row) => row.map(csvCell).join(','))].join('\n')
 }
 
+// A report table for a new Google Sheet (numbers stay numbers).
+export function blockTable(block: ReportBlock) {
+  return {
+    title: block.title.slice(0, 200) || 'Report',
+    tab: block.title.replace(/[[\]*?:/\\]/g, ' ').slice(0, 90) || 'Report',
+    headers: block.columns.map((c) => (c.unit ? `${c.name} (${c.unit})` : c.name)),
+    rows: block.rows.map((row) => row.map((v) => (v === undefined ? null : v))),
+  }
+}
+
 export function downloadCsv(block: ReportBlock) {
   const blob = new Blob(['﻿' + blockToCsv(block)], { type: 'text/csv;charset=utf-8' })
   const url = URL.createObjectURL(blob)

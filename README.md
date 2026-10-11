@@ -38,8 +38,9 @@ The system is built as a **React + TypeScript** frontend (Vite) paired with a **
 - **Lead Research Agent** — Discovers, filters, deeply researches, and qualifies companies as potential sales leads using Exa search and LLM analysis
 - **Sales & Outreach Agent** — Drafts personalized emails, thread-aware replies, and calendar invitations using the user's connected Gmail and Google Calendar
 - **General Agent** — The default chat agent: answers questions with company and conversation context, or hands the task to the right specialist
-- **CRM integrations over MCP** — Connect **HubSpot**, **Salesforce** or **Zoho CRM** through their official MCP servers. Ask General about contacts, companies and deals, ask it to update records, or add researched leads with one click. Lookups run on their own; every change is a draft you approve; delete and merge tools are never used
-- **Data & Reporting Agent** — Answers questions about numbers with headline figures, charts and tables, from the user's Agentis activity (leads, emails, replies, meetings) and CSV/Excel files they upload. The model plans queries; the backend runs every calculation, and the written summary may only quote numbers that the queries produced
+- **CRM integrations over MCP** — Connect **HubSpot**, **Salesforce** or **Zoho CRM** through their official MCP servers, all free to integrate, each person with their own account. Ask General about contacts, companies and deals, ask it to update records, or add researched leads with one click. Lookups run on their own; every change is a draft you approve; delete and merge tools are never used
+- **Google Sheets** — Link a sheet as a data file for Data & Reporting (read again whenever a report or a scheduled run uses it), and export researched leads or any report table to a new sheet, through the same Agentis Google sign-in as Gmail
+- **Data & Reporting Agent** — Answers questions about numbers with headline figures, charts and tables, from the user's Agentis activity (leads, emails, replies, meetings), CSV/Excel files they upload and Google Sheets they link. The model plans queries; the backend runs every calculation, and the written summary may only quote numbers that the queries produced
 - **Content & Copy Agent** — Writes LinkedIn posts, X posts and threads, Instagram captions, blog posts, Medium stories, emails and ad copy, plus any other writing to the user's own requirements (press releases, web pages, product descriptions, scripts), several options per piece. The backend checks every option against the platform's real limits (X counts links as 23 and emoji as 2) and against what the user asked for (word or character limits, phrases to include, sections), flags clichés and figures that aren't in the request, fixes rule-breaking drafts once, has an editor critique every option and rewrites them from that critique, then recommends one
 - **Notion and Medium** — Save any draft as a private page in the user's Notion workspace, or a story as a Medium draft (Medium only issues API tokens to accounts that made one before 2025; everyone else gets "Copy for Medium", which pastes with headings and emphasis intact)
 - **LinkedIn and X posting** — Connect a LinkedIn profile and post a chosen option (edited or not) straight from the chat, after a confirm step; without a connection, "Open in LinkedIn" opens LinkedIn's post box with the draft (and copies it). X uses its free post intent: "Open in X" opens X's composer with the draft filled in (direct posting through X's paid API turns on only if X keys are set)
@@ -387,8 +388,8 @@ Message about the CRM ("what's the status of the Acme deal?", "add these leads t
 
 | CRM | MCP server | Sign-in |
 |---|---|---|
-| HubSpot | `https://mcp.hubspot.com` | OAuth 2.0 + PKCE with an MCP auth app |
-| Salesforce | `https://api.salesforce.com/platform/mcp/v1/platform/sobject-all` | OAuth 2.0 + PKCE with an External Client App (`mcp_api`, `refresh_token`) |
+| HubSpot | `https://mcp.hubspot.com` | OAuth 2.0 + PKCE with Agentis's one MCP auth app; any HubSpot account can sign in (endpoints read from the server's OAuth metadata) |
+| Salesforce | `https://api.salesforce.com/platform/mcp/v1/platform/sobject-all` (or `sobject-reads`; `/v1/sandbox/...` for sandboxes) | OAuth 2.0 + PKCE with the company's own External Client App (`mcp_api`, `refresh_token`): hosted MCP servers only accept an app from the same org, so each company's admin makes one and people enter its consumer key and their My Domain on the Connect page |
 | Zoho CRM | Per org, from Zoho CRM > Setup > Developer Hub > MCP for AI Agents | The URL embeds its key (stored encrypted); Zoho asks the user to authorise each service on first use |
 
 ### Data & Reporting Agent
@@ -621,19 +622,33 @@ Run the Google connections migration:
    ```
 4. Set the relevant environment variables in `backend/.env`
 
+**Google Sheets** uses the same OAuth client. In the same Google Cloud project, enable the **Google Sheets API** and add the scopes `spreadsheets.readonly` and `drive.file` to the consent screen. Both are free. People connect Sheets on its own card; it adds the two scopes to their Google sign-in (same account as Gmail, or Sheets alone). `drive.file` only reaches spreadsheets Agentis creates, and `spreadsheets.readonly` reads the sheets people link. Run `supabase/migrations/20261014010000_google_sheets_datasets.sql`.
+
 ### 6. CRM Setup (Optional — HubSpot, Salesforce, Zoho CRM)
 
-Run `supabase/migrations/20261010000000_crm_connections.sql`. All CRMs return to one callback: `https://<your-backend>/integrations/crm/callback` (`CRM_OAUTH_REDIRECT_URI`, defaults to the Google callback's host). `INTEGRATIONS_ENCRYPTION_KEY` must be set.
+All three are free to integrate, and each person connects their own account:
+
+| | Who sets it up | Cost |
+|---|---|---|
+| HubSpot | You, once: one MCP auth app for every Agentis user | Free (free HubSpot CRM works). An app not listed on HubSpot's marketplace can be installed in up to 25 HubSpot accounts |
+| Salesforce | Each company's Salesforce admin, once, in their own org (Salesforce doesn't let one app serve other orgs' hosted MCP servers) | Free: hosted MCP servers come with Developer Edition (free) and Enterprise and up |
+| Zoho CRM | Nobody: each person pastes their own MCP server URL | Free (Zoho's MCP is free; calls use the org's API credits) |
+
+Run `supabase/migrations/20261010000000_crm_connections.sql` and `20261014000000_crm_company_apps.sql`. All CRMs return to one callback: `https://<your-backend>/integrations/crm/callback` (`CRM_OAUTH_REDIRECT_URI`, defaults to the Google callback's host). `INTEGRATIONS_ENCRYPTION_KEY` must be set.
 
 **HubSpot**
 1. In HubSpot: Development (or Settings > Integrations > Developer Platform) > **MCP Auth Apps** > Create.
 2. Redirect URL: the CRM callback above (exact match).
 3. Set `HUBSPOT_MCP_CLIENT_ID` and `HUBSPOT_MCP_CLIENT_SECRET` on the backend.
 
-**Salesforce** (Developer Edition or Enterprise and up)
-1. Setup > **MCP Servers**: activate `platform/sobject-all` (or set `SALESFORCE_MCP_URL` to another hosted server, e.g. `sobject-reads`).
-2. Setup > **External Client App Manager** > New: enable OAuth, callback URL = the CRM callback, scopes **`mcp_api`** and **`refresh_token`**, require **PKCE**, and turn on JWT-based access tokens for named users.
-3. Set `SALESFORCE_MCP_CLIENT_ID` (consumer key) and, if the app requires one, `SALESFORCE_MCP_CLIENT_SECRET`. Sandboxes: `SALESFORCE_LOGIN_URL=https://test.salesforce.com` and the `.../v1/sandbox/platform/...` server URL.
+Agentis reads HubSpot's sign-in and token endpoints from `https://mcp.hubspot.com/.well-known/oauth-authorization-server` (only if they're on HubSpot's own hosts), falling back to `HUBSPOT_MCP_AUTHORIZE_URL` / `HUBSPOT_MCP_TOKEN_URL`. Which tools a connection gets is up to HubSpot; Agentis offers whatever its server lists (writes still need approval).
+
+**Salesforce** — nothing on the server. The Connect page shows each company's admin these steps and the callback URL (Developer Edition or Enterprise and up):
+1. Setup > **MCP Servers**: activate `sobject-all` (or `sobject-reads` for read only).
+2. Setup > **External Client App Manager** > New: enable OAuth, callback URL = the CRM callback, scopes **`mcp_api`** and **`refresh_token`, `offline_access`**, require **PKCE**, turn on JWT-based access tokens for named users, and leave "require secret" off.
+3. Share the app's Consumer Key and the org's My Domain with the team. Each person enters them (and the consumer secret, only if the app requires one) on the Connect page and signs in. The connection keeps the key and domain, and the secret encrypted, for token refreshes; a My Domain under `.sandbox.my.salesforce.com` (or `test.salesforce.com`) uses the sandbox servers.
+
+`SALESFORCE_MCP_CLIENT_ID` (and `_SECRET`, `SALESFORCE_LOGIN_URL`, `SALESFORCE_MCP_URL`) are optional: they set a default app, which only works for people in your own org.
 
 **Zoho CRM** — no server setup. Each user opens Zoho CRM > Setup > Developer Hub > **MCP for AI Agents**, copies a server's URL (Data Operations allows changes; Data Insights is read-only) and pastes it on the Connect page.
 
@@ -794,7 +809,7 @@ The frontend runs at `http://localhost:5173` and the backend at `http://localhos
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
 | `GET` | `/integrations/crm` | ✅ Bearer | Status of HubSpot, Salesforce and Zoho CRM for the user |
-| `POST` | `/integrations/crm/{provider}/connect` | ✅ Bearer | HubSpot/Salesforce: returns the sign-in URL. Zoho: `{mcp_url}`, checked and saved |
+| `POST` | `/integrations/crm/{provider}/connect` | ✅ Bearer | HubSpot: returns the sign-in URL. Salesforce: `{client_id, client_secret?, login_url, server}` (the company's app), returns the sign-in URL. Zoho: `{mcp_url}`, checked and saved |
 | `GET` | `/integrations/crm/callback` | ❌ | OAuth callback (internal) |
 | `GET` | `/integrations/crm/{provider}/tools` | ✅ Bearer | The CRM's MCP tools and how each is treated |
 | `DELETE` | `/integrations/crm/{provider}` | ✅ Bearer | Disconnect a CRM |
@@ -807,6 +822,8 @@ The frontend runs at `http://localhost:5173` and the backend at `http://localhos
 | `POST` | `/general/run` | ✅ Bearer | Answer a message or route it to a specialist agent |
 | `POST` | `/data/run` | ✅ Bearer | Build a report (numbers, charts, tables) for a question |
 | `POST` | `/data/datasets` | ✅ Bearer | Upload a CSV/Excel file (base64) to be parsed and stored |
+| `POST` | `/data/sheets` | ✅ Bearer | Link one tab of a Google Sheet (`{url}`) as a data file; the same tab again updates it |
+| `POST` | `/data/sheets/{id}/refresh` | ✅ Bearer | Read a linked sheet again now |
 
 ### Content & Copy and posting
 
@@ -838,7 +855,8 @@ The frontend runs at `http://localhost:5173` and the backend at `http://localhos
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
 | `GET` | `/integrations/google/status` | ✅ Bearer | Check Google connection status |
-| `GET` | `/integrations/google/auth-url` | ✅ Bearer | Get Google OAuth consent URL |
+| `GET` | `/integrations/google/auth-url` | ✅ Bearer | Get Google OAuth consent URL (`?sheets=true` for Google Sheets) |
+| `POST` | `/integrations/google/sheets` | ✅ Bearer | Create a Google Sheet from `{title, tab, headers, rows}`; returns its link |
 | `GET` | `/integrations/google/callback` | ❌ | OAuth callback (internal) |
 | `DELETE` | `/integrations/google` | ✅ Bearer | Disconnect Google account |
 
@@ -898,6 +916,8 @@ The frontend runs at `http://localhost:5173` and the backend at `http://localhos
 | `account_label` | `text` | What the user connected as |
 | `mcp_url_encrypted` | `text` | MCP server URL, Fernet-encrypted (Zoho's embeds its key) |
 | `refresh_token_encrypted` | `text` | OAuth refresh token, Fernet-encrypted (HubSpot, Salesforce) |
+| `client_id` / `login_url` | `text` | Salesforce: the company's External Client App consumer key and sign-in domain |
+| `client_secret_encrypted` | `text` | Salesforce: that app's consumer secret, Fernet-encrypted, if it has one |
 | `tool_count` | `integer` | Tools the server offered when connected |
 
 > Backend only: RLS on with no policies, like `google_connections`.
@@ -913,8 +933,11 @@ The frontend runs at `http://localhost:5173` and the backend at `http://localhos
 | `rows` | `jsonb` | Typed rows (numbers, ISO dates, booleans, null for blanks) |
 | `row_count` / `size_bytes` | `integer` | Size of the upload |
 | `created_at` | `timestamptz` | Upload time |
+| `source` | `text` | `upload` or `google_sheets` |
+| `source_url` / `source_tab` | `text` | Linked sheet: its link (with the tab) and tab name |
+| `refreshed_at` | `timestamptz` | When a linked sheet was last read (again when used, if older than 5 minutes) |
 
-> Users can read and delete their own datasets (RLS); uploads are parsed and inserted by the backend.
+> Users can read and delete their own datasets (RLS); uploads and sheets are parsed and inserted by the backend.
 
 ### `scheduled_tasks`
 
@@ -998,8 +1021,9 @@ Test coverage includes:
 - Sales outreach agent and executor (`test_outreach.py`)
 - Reply checking (`test_replies.py`)
 - General agent and conversation context (`test_general.py`)
-- CRM over MCP: tool classification, PKCE and encrypted state, Zoho URL checks, the agent loop and approvals against a real local MCP server, token refresh (`test_crm.py`)
+- CRM over MCP: tool classification, PKCE and encrypted state, Zoho URL checks, the agent loop and approvals against a real local MCP server, token refresh, each company's Salesforce app (domains, servers, sign-in and refresh), HubSpot endpoints from its metadata (`test_crm.py`)
 - Data & Reporting: file parsing, query checks and execution, summary number checks, live reply status (`test_data_reporting.py`)
+- Google Sheets: link parsing, reading tabs, new sheets (text never becomes a formula), the Sheets sign-in and one-account rule, linking and refreshing sheets as data files, exports (`test_google_sheets.py`)
 - Content & Copy: X character counting, limit and claim checks, repair and scoring, LinkedIn text escaping, X threads (including a partial failure), posting rules, token refresh (`test_content.py`)
 - Content requirements, Notion and Medium: requirement parsing and checks, long-form labels and repair, markdown export, Notion pages and Medium drafts, Notion sign-in and token refresh, Medium token check, where each format can go (`test_content_destinations.py`)
 - Content claims and edits: claims the company profile doesn't back (verified quotes, penalty), saving edits per shape, re-checking figures, requirements and claims, refusing posted options (`test_content_edits.py`)

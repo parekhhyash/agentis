@@ -181,7 +181,7 @@ async def _run(
     await progress.add_step("Connecting to your Google account")
     token = await connections.get_access_token(config, user.id)
     connection = await connections.get_connection(user.id)
-    if not connection:
+    if not connection or not connection.gmail:
         raise GoogleNotConnectedError("Connect your Google account first so the agent can use Gmail and Calendar")
 
     # Earlier turns of this chat: lets "email them" or "make it shorter"

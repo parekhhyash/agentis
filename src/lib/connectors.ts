@@ -25,6 +25,8 @@ export interface ConnectorInfo {
   usedBy: string
   // Logo image URLs: one, or two for a pair like Gmail and Calendar.
   logos: string[]
+  // A black mark (X, Notion, Medium), shown white on the dark-mode tile.
+  monochrome?: boolean
   available: boolean
 }
 
@@ -38,6 +40,15 @@ export const CONNECTORS: ConnectorInfo[] = [
     available: true,
   },
   {
+    id: 'sheets',
+    name: 'Google Sheets',
+    description:
+      'Add a sheet as a data file (read again whenever a report uses it), and export leads or report tables to a new sheet.',
+    usedBy: 'Data & Reporting, Lead Research',
+    logos: [googleSheets],
+    available: true,
+  },
+  {
     id: 'hubspot',
     name: 'HubSpot',
     description: 'Ask about contacts, companies and deals, and add or update records (you approve each change), through HubSpot\u2019s MCP server.',
@@ -48,7 +59,8 @@ export const CONNECTORS: ConnectorInfo[] = [
   {
     id: 'salesforce',
     name: 'Salesforce',
-    description: 'Query and update accounts, contacts and opportunities through Salesforce\u2019s hosted MCP server.',
+    description:
+      'Query and update accounts, contacts and opportunities through Salesforce\u2019s hosted MCP server. Your Salesforce admin sets up a small app once (steps below).',
     usedBy: 'General, Lead Research',
     logos: [salesforce],
     available: true,
@@ -56,7 +68,7 @@ export const CONNECTORS: ConnectorInfo[] = [
   {
     id: 'zoho',
     name: 'Zoho CRM',
-    description: 'Search and update leads, contacts and deals through your Zoho CRM MCP server.',
+    description: 'Search and update leads, contacts and deals through your Zoho CRM MCP server (free from Zoho; no Agentis setup).',
     usedBy: 'General, Lead Research',
     logos: [zoho],
     available: true,
@@ -75,6 +87,7 @@ export const CONNECTORS: ConnectorInfo[] = [
     description: 'Drafted posts and threads open in X, ready to publish from your own account with one click. Free, nothing to connect.',
     usedBy: 'Content & Copy',
     logos: [x],
+    monochrome: true,
     available: true,
   },
   {
@@ -83,6 +96,7 @@ export const CONNECTORS: ConnectorInfo[] = [
     description: 'Save any Content & Copy draft as a private page in your Notion workspace, ready to edit and share.',
     usedBy: 'Content & Copy',
     logos: [notion],
+    monochrome: true,
     available: true,
   },
   {
@@ -91,6 +105,7 @@ export const CONNECTORS: ConnectorInfo[] = [
     description: 'Save stories as drafts on Medium to publish from there. Needs an integration token made before 2025.',
     usedBy: 'Content & Copy',
     logos: [medium],
+    monochrome: true,
     available: true,
   },
   {
@@ -107,14 +122,6 @@ export const CONNECTORS: ConnectorInfo[] = [
     description: 'Get updates from your agents and hand them tasks from a channel.',
     usedBy: 'Every agent',
     logos: [slack],
-    available: false,
-  },
-  {
-    id: 'sheets',
-    name: 'Google Sheets',
-    description: 'Read data for reports and export leads to a sheet.',
-    usedBy: 'Data & Reporting',
-    logos: [googleSheets],
     available: false,
   },
 ]

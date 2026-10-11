@@ -34,6 +34,7 @@ export default function ChatConversation({
   scheduled,
   onOpenChat,
   onOpenScheduled,
+  sheetsConnected = false,
 }: {
   request: AgentRequest
   handedOff?: boolean
@@ -47,6 +48,8 @@ export default function ChatConversation({
   scheduled?: ScheduledTasks
   onOpenChat?: (conversationId: string) => void
   onOpenScheduled?: () => void
+  // Google Sheets is connected: lead and report tables offer "Export to Google Sheets".
+  sheetsConnected?: boolean
 }) {
   const files = attachmentsOf(request.attachments)
   const fileChips = files.length > 0 && (
@@ -142,7 +145,7 @@ export default function ChatConversation({
                 onOpenScheduled={() => onOpenScheduled?.()}
               />
             ) : isDataReport(request.result) ? (
-              <ReportPanel result={request.result} />
+              <ReportPanel result={request.result} sheetsConnected={sheetsConnected} />
             ) : isOutreachResult(request.result) ? (
               <OutreachResultsPanel
                 key={request.id}
@@ -156,6 +159,7 @@ export default function ChatConversation({
                 result={request.result as unknown as AnyLeadResult}
                 crms={crms.map((c) => c.name)}
                 onAddToCrm={onAddLeadsToCrm}
+                sheetsConnected={sheetsConnected}
               />
             ))}
 

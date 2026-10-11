@@ -300,6 +300,7 @@ def test_report_checks_gmail_live_when_it_uses_replies(monkeypatch):
 
     class Connection:
         email = "me@agentis.app"
+        gmail = True
 
     async def get_connection(user_id):
         return Connection()

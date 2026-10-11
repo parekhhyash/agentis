@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
-import { downloadLeadsCsv } from '../../lib/leadExport'
+import { downloadLeadsCsv, leadsTable } from '../../lib/leadExport'
+import SheetsExportButton from './SheetsExportButton'
 import {
   isLeadResearchResult,
   type AnyLeadResult,
@@ -205,10 +206,12 @@ function ResearchResults({
   result,
   crms,
   onAddToCrm,
+  sheetsConnected,
 }: {
   result: LeadResearchResult
   crms: string[]
   onAddToCrm?: (crmName: string, count: number) => void
+  sheetsConnected: boolean
 }) {
   const [asked, setAsked] = useState<string | null>(null)
   return (
@@ -242,6 +245,12 @@ function ResearchResults({
             >
               Export CSV
             </button>
+            {sheetsConnected && (
+              <SheetsExportButton
+                table={() => leadsTable(result)}
+                className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+              />
+            )}
           </div>
         )}
       </div>
@@ -338,13 +347,16 @@ export default function LeadResultsPanel({
   result,
   crms = [],
   onAddToCrm,
+  sheetsConnected = false,
 }: {
   result: AnyLeadResult
   crms?: string[]
   onAddToCrm?: (crmName: string, count: number) => void
+  // Google Sheets is connected: offer "Export to Google Sheets".
+  sheetsConnected?: boolean
 }) {
   return isLeadResearchResult(result) ? (
-    <ResearchResults result={result} crms={crms} onAddToCrm={onAddToCrm} />
+    <ResearchResults result={result} crms={crms} onAddToCrm={onAddToCrm} sheetsConnected={sheetsConnected} />
   ) : (
     <LegacyResults result={result} />
   )

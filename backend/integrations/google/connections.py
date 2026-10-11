@@ -30,6 +30,15 @@ class GoogleConnection:
     scopes: list[str]
     connected_at: str | None
 
+    @property
+    def gmail(self) -> bool:
+        """Gmail and Calendar are allowed (a Sheets-only connection has neither)."""
+        return oauth.has_gmail(self.scopes)
+
+    @property
+    def sheets(self) -> bool:
+        return oauth.has_sheets(self.scopes)
+
 
 def _fernet(secret_key: str) -> Fernet:
     try:
