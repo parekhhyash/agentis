@@ -76,9 +76,14 @@ travels encrypted in `state`), connections in `crm_connections`
 (`supabase/migrations/20261010000000_crm_connections.sql`). Setup per CRM is in
 the root README.
 
-- HubSpot: one MCP auth app for everyone (`HUBSPOT_MCP_CLIENT_ID/SECRET`); the
-  authorize and token endpoints come from the server's RFC 8414 metadata when
-  they're on HubSpot's hosts (`oauth.with_server_endpoints`, cached a day).
+- HubSpot: one MCP connector for everyone (`HUBSPOT_MCP_CLIENT_ID/SECRET`); the
+  endpoints come from the server's protected-resource metadata (RFC 9728) and
+  its authorization server's metadata (RFC 8414), only on HubSpot's hosts, with
+  the advertised `resource` sent (RFC 8707) (`oauth.with_server_endpoints`,
+  cached a day). Refresh tokens are single-use: one refresh at a time per
+  connection. HubSpot confirms writes with the client: `McpConnection.call(...,
+  approved=True)` answers its elicitation (and sets confirm fields) only for
+  changes the user approved.
 - Salesforce: hosted MCP servers only accept an External Client App from the
   same org, so `POST /integrations/crm/salesforce/connect` takes the company's
   `{client_id, client_secret?, login_url, server}`, checked by

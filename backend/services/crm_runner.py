@@ -13,7 +13,7 @@ from agents.lead_research.llm import build_llm_client
 from config.settings import get_settings
 from integrations.crm.connections import connected_providers, open_crm
 from integrations.crm.providers import NAMES, CrmError
-from integrations.mcp.client import McpConnection, McpError, destructive_arguments
+from integrations.mcp.client import McpConnection, McpError, asks_for_confirmation, confirmed_arguments, destructive_arguments
 from services import supabase_rest
 from services.auth import AuthUser
 from services.progress_reporter import ProgressTracker
@@ -107,9 +107,15 @@ async def _execute(user: AuthUser, action: CrmAction) -> CrmAction:
             problem = check_arguments(tool, action.arguments)
             if problem:
                 raise CrmError(f"The change no longer fits {NAMES[action.provider]}'s tool: {problem}", 409)
-            output = await connection.call(action.tool, action.arguments)
+            # The user approved it here, so that counts as the CRM's own confirmation too.
+            output = await connection.call(action.tool, confirmed_arguments(tool, action.arguments), approved=True)
     except (CrmError, McpError) as exc:
         done.status, done.error = "failed", str(exc)
+        return done
+    if output.ok and asks_for_confirmation(output.text):
+        # The server still wanted a confirmation: nothing was changed.
+        done.status = "failed"
+        done.error = f"{NAMES[action.provider]} asked to confirm the change again, so it wasn't made. Try approving it again."
         return done
     if output.ok:
         done.status, done.error, done.sign_in_url = "done", None, None

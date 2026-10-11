@@ -43,10 +43,13 @@ def read_state(secret_key: str, state: str) -> dict[str, str]:
         raise CrmError(str(exc), 400) from None
 
 
-# HubSpot publishes its sign-in endpoints (RFC 8414 metadata); they're used
-# when they point at HubSpot's own hosts, else the configured ones.
+# HubSpot's sign-in endpoints, found the way the MCP authorization spec
+# describes: the server's protected-resource metadata (RFC 9728) names its
+# authorization server, whose metadata (RFC 8414) gives the endpoints. Only
+# HubSpot's own hosts are used; anything else keeps the configured ones.
 DISCOVERY_TTL_SECONDS = 86400.0
-_discovered: dict[str, tuple[str, str, float]] = {}
+# origin -> (authorize URL, token URL, resource or None, expires at)
+_discovered: dict[str, tuple[str, str, str | None, float]] = {}
 
 
 def _hubspot_host(url: str) -> bool:
@@ -55,24 +58,43 @@ def _hubspot_host(url: str) -> bool:
     return parsed.scheme == "https" and (host in ("hubspot.com", "hubapi.com") or host.endswith((".hubspot.com", ".hubapi.com")))
 
 
+def _metadata_url(issuer: str) -> str:
+    """RFC 8414: the well-known path goes between the host and the issuer's path."""
+    parsed = urlparse(issuer)
+    return f"{parsed.scheme}://{parsed.netloc}/.well-known/oauth-authorization-server{parsed.path.rstrip('/')}"
+
+
+async def _metadata(client: httpx.AsyncClient, url: str) -> dict[str, Any]:
+    try:
+        response = await client.get(url, timeout=5.0)
+        data = response.json() if response.status_code == 200 else {}
+    except (httpx.HTTPError, ValueError):
+        data = {}
+    return data if isinstance(data, dict) else {}
+
+
 async def with_server_endpoints(provider: OAuthProvider, client: httpx.AsyncClient) -> OAuthProvider:
     if provider.id != "hubspot":
         return provider
     parsed = urlparse(provider.mcp_url)
     origin = f"{parsed.scheme}://{parsed.netloc}"
     cached = _discovered.get(origin)
-    if not cached or cached[2] < time.time():
-        try:
-            response = await client.get(f"{origin}/.well-known/oauth-authorization-server", timeout=5.0)
-            data = response.json() if response.status_code == 200 else {}
-        except (httpx.HTTPError, ValueError):
-            data = {}
-        authorize, token = str(data.get("authorization_endpoint") or ""), str(data.get("token_endpoint") or "")
-        if not (_hubspot_host(authorize) and _hubspot_host(token)):
+    if not cached or cached[3] < time.time():
+        resource_meta = await _metadata(client, f"{origin}/.well-known/oauth-protected-resource")
+        issuers = [str(i) for i in resource_meta.get("authorization_servers") or [] if _hubspot_host(str(i))]
+        found = None
+        for url in [*(_metadata_url(i) for i in issuers), f"{origin}/.well-known/oauth-authorization-server"]:
+            data = await _metadata(client, url)
+            authorize, token = str(data.get("authorization_endpoint") or ""), str(data.get("token_endpoint") or "")
+            if _hubspot_host(authorize) and _hubspot_host(token):
+                found = (authorize, token)
+                break
+        if not found:
             return provider
-        cached = (authorize, token, time.time() + DISCOVERY_TTL_SECONDS)
+        resource = str(resource_meta.get("resource") or "")
+        cached = (*found, resource if _hubspot_host(resource) else None, time.time() + DISCOVERY_TTL_SECONDS)
         _discovered[origin] = cached
-    return dataclasses.replace(provider, authorize_url=cached[0], token_url=cached[1])
+    return dataclasses.replace(provider, authorize_url=cached[0], token_url=cached[1], resource=cached[2])
 
 
 def authorize_url(provider: OAuthProvider, redirect_uri: str, state: str, challenge: str) -> str:
@@ -86,6 +108,8 @@ def authorize_url(provider: OAuthProvider, redirect_uri: str, state: str, challe
     }
     if provider.scope:
         params["scope"] = provider.scope
+    if provider.resource:
+        params["resource"] = provider.resource
     if provider.id == "salesforce":
         params["prompt"] = "login consent"
     return f"{provider.authorize_url}?{urlencode(params)}"
@@ -93,6 +117,8 @@ def authorize_url(provider: OAuthProvider, redirect_uri: str, state: str, challe
 
 async def _token_request(provider: OAuthProvider, form: dict[str, str], client: httpx.AsyncClient) -> TokenGrant:
     form = {**form, "client_id": provider.client_id}
+    if provider.resource:
+        form["resource"] = provider.resource
     if provider.client_secret:
         form["client_secret"] = provider.client_secret
     response = await client.post(provider.token_url, data=form, headers={"Accept": "application/json"})

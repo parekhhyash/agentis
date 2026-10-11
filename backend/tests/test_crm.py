@@ -142,7 +142,9 @@ def test_client_lists_classified_tools_and_rejects_bad_tokens(crm):
         return kinds, found
 
     kinds, found = asyncio.run(go())
-    assert kinds == {"search_contacts": "read", "create_contact": "write", "delete_contact": "blocked", "get_notes": "read"}
+    assert kinds == {
+        "search_contacts": "read", "create_contact": "write", "update_contact": "write", "delete_contact": "blocked", "get_notes": "read",
+    }
     assert found.ok and "ravi@acme.io" in found.text
 
 
@@ -253,7 +255,7 @@ def test_open_crm_refreshes_a_rejected_token_once(crm, monkeypatch):
         async with connections.open_crm(USER.id, "hubspot") as connection:
             return len(await connection.tools())
 
-    assert asyncio.run(go()) == 4 and tokens == [False, True]
+    assert asyncio.run(go()) == 5 and tokens == [False, True]
 
 
 # --- General routes CRM questions only when a CRM is connected -----------------
@@ -406,29 +408,57 @@ def test_salesforce_refresh_uses_the_stored_company_app(monkeypatch):
 
 # --- HubSpot: sign-in endpoints from the server's metadata ------------------------
 
-def test_hubspot_endpoints_come_from_its_metadata_when_on_hubspot_hosts(monkeypatch):
+def test_hubspot_sign_in_is_found_the_way_the_mcp_spec_describes(monkeypatch):
     monkeypatch.setattr(oauth, "_discovered", {})
-    answers = iter([
-        {"authorization_endpoint": "https://evil.io/authorize", "token_endpoint": "https://mcp.hubspot.com/oauth/v3/token"},
-        {"authorization_endpoint": "https://mcp.hubspot.com/oauth/authorize/user", "token_endpoint": "https://mcp.hubspot.com/oauth/v3/token"},
-    ])
+    requests: list[str] = []
+    answers = {
+        "/.well-known/oauth-protected-resource": {"resource": "https://mcp.hubspot.com", "authorization_servers": ["https://mcp.hubspot.com/oauth"]},
+        "/.well-known/oauth-authorization-server/oauth": {
+            "authorization_endpoint": "https://mcp.hubspot.com/oauth/authorize/user", "token_endpoint": "https://mcp.hubspot.com/oauth/v3/token",
+        },
+    }
 
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/.well-known/oauth-authorization-server"
-        return httpx.Response(200, json=next(answers))
+        requests.append(request.url.path)
+        if request.url.path in answers:
+            return httpx.Response(200, json=answers[request.url.path])
+        if request.url.path == "/oauth/v3/token":
+            return httpx.Response(200, json={"access_token": "a", "refresh_token": "r", "expires_in": 1800})
+        return httpx.Response(404)
 
     base = oauth_provider("hubspot", settings(hubspot_mcp_authorize_url="https://mcp.hubspot.com/old"))
 
     async def go():
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            first = await oauth.with_server_endpoints(base, client)
-            second = await oauth.with_server_endpoints(base, client)
-            third = await oauth.with_server_endpoints(base, client)  # cached, no request
-            return first, second, third
+            found = await oauth.with_server_endpoints(base, client)
+            again = await oauth.with_server_endpoints(base, client)  # cached
+            grant = await oauth.exchange_code(found, "code", "verifier", "https://cb", client)
+            return found, again, grant
 
-    first, second, third = asyncio.run(go())
-    assert first.authorize_url == "https://mcp.hubspot.com/old"  # a foreign host is ignored
-    assert second.authorize_url == third.authorize_url == "https://mcp.hubspot.com/oauth/authorize/user"
+    found, again, grant = asyncio.run(go())
+    assert found.authorize_url == again.authorize_url == "https://mcp.hubspot.com/oauth/authorize/user"
+    assert found.resource == "https://mcp.hubspot.com" and grant.access_token == "a"
+    params = parse_qs(urlparse(oauth.authorize_url(found, "https://cb", "st", "ch")).query)
+    assert params["resource"] == ["https://mcp.hubspot.com"] and params["code_challenge_method"] == ["S256"] and "scope" not in params
+    assert requests.count("/.well-known/oauth-protected-resource") == 1  # second lookup came from the cache
+
+
+def test_hubspot_sign_in_ignores_foreign_hosts_and_falls_back(monkeypatch):
+    monkeypatch.setattr(oauth, "_discovered", {})
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/.well-known/oauth-protected-resource":
+            return httpx.Response(200, json={"resource": "https://evil.io", "authorization_servers": ["https://evil.io"]})
+        return httpx.Response(200, json={"authorization_endpoint": "https://evil.io/authorize", "token_endpoint": "https://mcp.hubspot.com/t"})
+
+    base = oauth_provider("hubspot", settings(hubspot_mcp_authorize_url="https://mcp.hubspot.com/old"))
+
+    async def go():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            return await oauth.with_server_endpoints(base, client)
+
+    kept = asyncio.run(go())
+    assert kept.authorize_url == "https://mcp.hubspot.com/old" and kept.resource is None
     salesforce = oauth_provider("salesforce", settings())
     assert asyncio.run(oauth.with_server_endpoints(salesforce, None)) is salesforce  # type: ignore[arg-type]
 
@@ -482,7 +512,7 @@ def rotating(monkeypatch):
     from collections import defaultdict
 
     monkeypatch.setattr(connections, "_refresh_locks", defaultdict(asyncio.Lock))
-    monkeypatch.setattr(oauth, "_discovered", {"https://mcp.hubspot.com": ("https://mcp.hubspot.com/a", "https://mcp.hubspot.com/t", 9e12)})
+    monkeypatch.setattr(oauth, "_discovered", {"https://mcp.hubspot.com": ("https://mcp.hubspot.com/a", "https://mcp.hubspot.com/t", None, 9e12)})
     state: dict[str, Any] = {"row": {"provider": "hubspot", "refresh_token_encrypted": connections._encrypt("r1")}, "valid": {"r1"},
                              "refreshes": 0, "deleted": False}
 
@@ -547,3 +577,62 @@ def test_a_really_revoked_token_drops_the_connection(rotating):
     with pytest.raises(CrmError) as err:
         asyncio.run(connections._access_token("u-hub", "hubspot", dict(rotating["row"]), force=True))
     assert err.value.status == 409 and rotating["deleted"]
+
+
+
+# --- HubSpot asks for confirmation before it writes ---------------------------------
+
+def test_hubspot_tools_are_classified_as_its_docs_describe():
+    from mcp.types import Tool
+
+    from integrations.mcp.client import classify
+
+    kinds = {name: classify(Tool(name=name, inputSchema={"type": "object"})) for name in [
+        "get_user_details", "discover_hubspot_schema", "search_crm_objects", "query_crm_data", "tool_guidance",
+        "get_conversation_channel_metadata", "manage_crm_objects", "manage_segment", "submit_feedback",
+    ]}
+    assert {n for n, k in kinds.items() if k == "read"} == {
+        "get_user_details", "discover_hubspot_schema", "search_crm_objects", "query_crm_data", "tool_guidance",
+        "get_conversation_channel_metadata",
+    }
+    assert kinds["manage_crm_objects"] == kinds["manage_segment"] == kinds["submit_feedback"] == "write"
+
+
+def test_an_approved_change_answers_the_servers_confirmation():
+    from integrations.mcp.client import McpTool, _Approval, _confirmation_answer, asks_for_confirmation, confirmed_arguments
+
+    tool = McpTool(name="manage_crm_objects", description="", kind="write", input_schema={
+        "type": "object", "properties": {"objects": {"type": "array"}, "confirmed": {"type": "boolean"}, "dryRun": {"type": "boolean"}},
+    })
+    assert confirmed_arguments(tool, {"objects": []}) == {"objects": [], "confirmed": True}
+    assert _confirmation_answer({"properties": {"confirm": {"type": "boolean"}, "choice": {"type": "string", "enum": ["Cancel", "Proceed"]}}}) == {
+        "confirm": True, "choice": "Proceed"}
+    assert _confirmation_answer({"properties": {"reason": {"type": "string"}}, "required": ["reason"]}) is None
+    assert asks_for_confirmation("This change requires explicit user confirmation before executing.")
+    assert not asks_for_confirmation("Created contact 123. Confirmed by HubSpot.")
+
+    class Form:
+        mode = "form"
+        requested_schema = {"properties": {"confirm": {"type": "boolean"}}}
+
+    approval = _Approval()
+    assert asyncio.run(approval(None, Form())).action == "decline"  # lookups never confirm anything
+    approval.approved = True
+    accepted = asyncio.run(approval(None, Form()))
+    assert accepted.action == "accept" and accepted.content == {"confirm": True}
+
+
+def test_a_real_mcp_server_confirmation_is_answered_only_for_approved_changes(crm):
+    from integrations.mcp.client import asks_for_confirmation
+
+    url, _ = crm
+
+    async def go():
+        async with open_connection(url, bearer=TOKEN) as connection:
+            looked_up = await connection.call("update_contact", {"id": "c1", "name": "Ravi K"})
+            approved = await connection.call("update_contact", {"id": "c1", "name": "Ravi K"}, approved=True)
+            return looked_up, approved
+
+    looked_up, approved = asyncio.run(go())
+    assert asks_for_confirmation(looked_up.text) and "Not changed" in looked_up.text
+    assert approved.ok and approved.text == "Updated c1"

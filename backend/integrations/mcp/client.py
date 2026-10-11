@@ -17,7 +17,7 @@ import httpx2
 from mcp import ClientSession
 from mcp.client.streamable_http import create_mcp_http_client, streamable_http_client
 from mcp.shared.exceptions import MCPError
-from mcp.types import Implementation, Tool
+from mcp.types import ElicitResult, Implementation, Tool
 
 ToolKind = Literal["read", "write", "blocked"]
 
@@ -30,7 +30,17 @@ _WRITE_WORDS = {
 _READ_WORDS = {
     "get", "list", "search", "query", "find", "read", "describe", "fetch", "count", "retrieve", "lookup", "show",
     "view", "soql", "sosl", "schema", "details", "info", "recent", "related",
+    # How-to and discovery tools (HubSpot's tool_guidance, discover_hubspot_schema).
+    "guidance", "discover", "metadata", "help",
 }
+# A server asking for a confirmation it didn't get (the change wasn't made).
+_NEEDS_CONFIRMATION = re.compile(
+    r"please confirm|awaiting (your |user )?confirmation|requires? (an? )?(explicit )?(user )?confirmation|"
+    r"confirm (to|before) (proceed|continu|execut|apply)|not (yet )?(been )?(applied|executed|made)[^.]*confirm",
+    re.I,
+)
+# Input fields that carry a confirmation flag ("confirmed", "userConfirmed").
+_CONFIRM_FIELD = re.compile(r"confirm|approv", re.I)
 _SIGN_IN = re.compile(r"https://[^\s\"'<>)\]]*(?:accounts\.zoho|oauth|authori[sz]e|/auth\b|signin|sign-in|consent)[^\s\"'<>)\]]*", re.I)
 
 
@@ -125,6 +135,54 @@ def destructive_arguments(arguments: Any) -> str | None:
     return walk(arguments)
 
 
+def confirmed_arguments(tool: McpTool, arguments: dict[str, Any]) -> dict[str, Any]:
+    """The arguments of a change the user approved, with any yes/no
+    confirmation field the tool has set to yes (some servers, like
+    HubSpot's, ask for confirmation before they write)."""
+    properties = (tool.input_schema or {}).get("properties") or {}
+    out = dict(arguments)
+    for name, spec in properties.items():
+        if isinstance(spec, dict) and spec.get("type") == "boolean" and _CONFIRM_FIELD.search(name):
+            out[name] = True
+    return out
+
+
+def asks_for_confirmation(text: str) -> bool:
+    return bool(_NEEDS_CONFIRMATION.search(text or ""))
+
+
+def _confirmation_answer(schema: dict[str, Any]) -> dict[str, Any] | None:
+    """Answers to a server's confirmation form: yes to every yes/no field,
+    the "confirm"-like choice of a list. None if the form asks for anything
+    else that's required (Agentis can't make that up)."""
+    required = set(schema.get("required") or [])
+    answer: dict[str, Any] = {}
+    for name, spec in (schema.get("properties") or {}).items():
+        spec = spec if isinstance(spec, dict) else {}
+        options = spec.get("enum") or [o.get("const") for o in spec.get("oneOf") or [] if isinstance(o, dict)]
+        if spec.get("type") == "boolean":
+            answer[name] = True
+        elif options and (choice := next((o for o in options if re.match(r"(yes|confirm|approve|proceed|accept|ok)", str(o), re.I)), None)):
+            answer[name] = choice
+        elif name in required:
+            return None
+    return answer
+
+
+class _Approval:
+    """Whether the call in flight is a change the user approved; only then
+    are a server's confirmation requests (MCP elicitation) answered yes."""
+
+    def __init__(self) -> None:
+        self.approved = False
+
+    async def __call__(self, context: Any, params: Any) -> ElicitResult:
+        if not self.approved or getattr(params, "mode", "form") == "url":
+            return ElicitResult(action="decline")
+        answer = _confirmation_answer(getattr(params, "requested_schema", None) or {})
+        return ElicitResult(action="accept", content=answer) if answer is not None else ElicitResult(action="decline")
+
+
 def _to_tool(tool: Tool) -> McpTool:
     return McpTool(
         name=tool.name,
@@ -182,11 +240,12 @@ def _mapped(exc: BaseException, server: str, statuses: list[int]) -> BaseExcepti
 class McpConnection:
     """One open MCP session. Use `open_connection` to create it."""
 
-    def __init__(self, session: ClientSession, server: str, statuses: list[int] | None = None):
+    def __init__(self, session: ClientSession, server: str, statuses: list[int] | None = None, approval: _Approval | None = None):
         self._session = session
         self.server = server
         self._statuses = statuses if statuses is not None else []
         self._tools: list[McpTool] | None = None
+        self._approval = approval or _Approval()
 
     async def tools(self) -> list[McpTool]:
         if self._tools is None:
@@ -207,11 +266,16 @@ class McpConnection:
     async def tool(self, name: str) -> McpTool | None:
         return next((t for t in await self.tools() if t.name == name), None)
 
-    async def call(self, name: str, arguments: dict[str, Any], timeout: float = 45.0) -> ToolOutput:
+    async def call(self, name: str, arguments: dict[str, Any], timeout: float = 45.0, *, approved: bool = False) -> ToolOutput:
+        """Runs a tool. `approved` is for a change the user approved: the
+        server's own confirmation requests during it are answered yes."""
+        self._approval.approved = approved
         try:
             result = await self._session.call_tool(name, arguments, read_timeout_seconds=timeout)
         except Exception as exc:  # noqa: BLE001 - mapped below
             raise _mapped(exc, self.server, self._statuses) from exc
+        finally:
+            self._approval.approved = False
         text = _text_of(result)
         data = getattr(result, "structured_content", None)
         if data is None:
@@ -243,10 +307,13 @@ async def open_connection(url: str, *, bearer: str | None = None, server: str = 
             http.event_hooks["response"].append(record)
             await stack.enter_async_context(http)
             streams = await stack.enter_async_context(streamable_http_client(url, http_client=http))
+            approval = _Approval()
             session = await stack.enter_async_context(
-                ClientSession(streams[0], streams[1], client_info=Implementation(name="Agentis", version="1.0"))
+                ClientSession(
+                    streams[0], streams[1], client_info=Implementation(name="Agentis", version="1.0"), elicitation_callback=approval
+                )
             )
             await session.initialize()
-            yield McpConnection(session, server, statuses)
+            yield McpConnection(session, server, statuses, approval)
     except Exception as exc:  # noqa: BLE001 - the SDK wraps failures in task-group exception groups
         raise _mapped(exc, server, statuses) from exc

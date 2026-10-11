@@ -7,11 +7,16 @@ import time
 from contextlib import contextmanager
 
 import uvicorn
-from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver import Context, MCPServer
+from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
 TOKEN = "good-token"
+
+
+class Confirm(BaseModel):
+    confirm: bool
 
 
 def build_app(records: list[dict]):
@@ -29,6 +34,14 @@ def build_app(records: list[dict]):
         record = {"id": f"c{len(records) + 1}", "name": name, "email": email, "company": company}
         records.append(record)
         return record
+
+    @server.tool()
+    async def update_contact(id: str, name: str, ctx: Context) -> str:
+        """Update a contact, after the user confirms (like HubSpot's manage tool)."""
+        answer = await ctx.elicit(message=f"Rename {id} to {name}?", schema=Confirm)
+        if answer.action != "accept" or not answer.data.confirm:
+            return "Not changed: this update requires explicit user confirmation."
+        return f"Updated {id}"
 
     @server.tool()
     def delete_contact(id: str) -> str:

@@ -391,7 +391,7 @@ Message about the CRM ("what's the status of the Acme deal?", "add these leads t
 
 | CRM | MCP server | Sign-in |
 |---|---|---|
-| HubSpot | `https://mcp.hubspot.com` | OAuth 2.0 + PKCE with Agentis's one MCP auth app; any HubSpot account can sign in (endpoints read from the server's OAuth metadata) |
+| HubSpot | `https://mcp.hubspot.com` | OAuth 2.1 + PKCE with Agentis's one MCP connector; any HubSpot account can sign in (endpoints found from the server's OAuth metadata) |
 | Salesforce | `https://api.salesforce.com/platform/mcp/v1/platform/sobject-all` (or `sobject-reads`; `/v1/sandbox/...` for sandboxes) | OAuth 2.0 + PKCE with the company's own External Client App (`mcp_api`, `refresh_token`): hosted MCP servers only accept an app from the same org, so each company's admin makes one and people enter its consumer key and their My Domain on the Connect page |
 | Zoho CRM | Per org, from Zoho CRM > Setup > Developer Hub > MCP for AI Agents | The URL embeds its key (stored encrypted); Zoho asks the user to authorise each service on first use |
 
@@ -633,18 +633,19 @@ All three are free to integrate, and each person connects their own account:
 
 | | Who sets it up | Cost |
 |---|---|---|
-| HubSpot | You, once: one MCP auth app for every Agentis user | Free (free HubSpot CRM works). An app not listed on HubSpot's marketplace can be installed in up to 25 HubSpot accounts |
+| HubSpot | You, once: one MCP connector for every Agentis user | Free (free HubSpot CRM works; some tools need paid hubs) |
 | Salesforce | Each company's Salesforce admin, once, in their own org (Salesforce doesn't let one app serve other orgs' hosted MCP servers) | Free: hosted MCP servers come with Developer Edition (free) and Enterprise and up |
 | Zoho CRM | Nobody: each person pastes their own MCP server URL | Free (Zoho's MCP is free; calls use the org's API credits) |
 
 Run `supabase/migrations/20261010000000_crm_connections.sql` and `20261014000000_crm_company_apps.sql`. All CRMs return to one callback: `https://<your-backend>/integrations/crm/callback` (`CRM_OAUTH_REDIRECT_URI`, defaults to the Google callback's host). `INTEGRATIONS_ENCRYPTION_KEY` must be set.
 
 **HubSpot**
-1. In HubSpot: Development (or Settings > Integrations > Developer Platform) > **MCP Auth Apps** > Create.
-2. Redirect URL: the CRM callback above (exact match).
-3. Set `HUBSPOT_MCP_CLIENT_ID` and `HUBSPOT_MCP_CLIENT_SECRET` on the backend.
+Following HubSpot's [Integrate AI tools with the HubSpot MCP server](https://developers.hubspot.com/docs/apps/developer-platform/build-apps/integrate-with-the-remote-hubspot-mcp-server):
+1. In HubSpot: **Development** > **MCP Connectors** > **Create MCP connector**. Name `Agentis`, an optional description and icon, and the **Redirect URL** = the CRM callback above (exact match). There are no scopes to pick: HubSpot derives them from its tools and what each user grants.
+2. On the connector's details page, copy the **Client ID** and **Client secret** into `HUBSPOT_MCP_CLIENT_ID` and `HUBSPOT_MCP_CLIENT_SECRET` on the backend.
+3. People click Connect on the HubSpot card, choose their HubSpot account, grant permissions and authorize.
 
-Agentis reads HubSpot's sign-in and token endpoints from `https://mcp.hubspot.com/.well-known/oauth-authorization-server` (only if they're on HubSpot's own hosts), falling back to `HUBSPOT_MCP_AUTHORIZE_URL` / `HUBSPOT_MCP_TOKEN_URL`. Which tools a connection gets is up to HubSpot; Agentis offers whatever its server lists (writes still need approval). HubSpot's MCP server uses OAuth 2.1 with PKCE and single-use refresh tokens: each refresh returns a new one, so Agentis refreshes a connection one request at a time, saves the new token, and if a refresh is rejected because another request already rotated it, retries with the newer token instead of dropping the connection. Access follows each user's HubSpot permissions, and if an account turns on HubSpot's Sensitive Data setting, activities (calls, emails, meetings, notes, tasks) aren't available through MCP.
+Agentis finds HubSpot's sign-in endpoints the way the MCP authorization spec describes (the server's `/.well-known/oauth-protected-resource`, then its authorization server's metadata), uses them only on HubSpot's own hosts, sends the advertised `resource`, and falls back to `HUBSPOT_MCP_AUTHORIZE_URL` / `HUBSPOT_MCP_TOKEN_URL`. `tool_guidance` and the other lookup tools run on their own; `manage_crm_objects` and every other "manage" tool are changes that wait for approval. HubSpot asks the client to confirm before it writes; Agentis answers that confirmation (MCP elicitation, or a `confirm` field) only while running a change the user approved, never during lookups, and marks a change as not made if HubSpot still asks. Which tools a connection gets is up to HubSpot; Agentis offers whatever its server lists (writes still need approval). HubSpot's MCP server uses OAuth 2.1 with PKCE and single-use refresh tokens: each refresh returns a new one, so Agentis refreshes a connection one request at a time, saves the new token, and if a refresh is rejected because another request already rotated it, retries with the newer token instead of dropping the connection. Access follows each user's HubSpot permissions, and if an account turns on HubSpot's Sensitive Data setting, activities (calls, emails, meetings, notes, tasks) aren't available through MCP.
 
 **Salesforce** — nothing on the server. The Connect page shows each company's admin these steps and the callback URL (Developer Edition or Enterprise and up):
 1. Setup > **MCP Servers**: activate `sobject-all` (or `sobject-reads` for read only).

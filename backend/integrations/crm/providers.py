@@ -1,6 +1,6 @@
 """The CRMs Agentis connects to over MCP, and how each one signs users in.
 
-- HubSpot: OAuth 2.0 authorization code + PKCE with one "MCP auth app" the
+- HubSpot: OAuth 2.1 authorization code + PKCE with one "MCP connector" the
   operator registers; any HubSpot account (free CRM included) can sign in.
 - Salesforce: hosted MCP servers only accept an External Client App created
   in the same org, and can't be packaged for other orgs, so each company's
@@ -48,6 +48,9 @@ class OAuthProvider:
     client_id: str
     client_secret: str | None
     scope: str
+    # The MCP server as an OAuth resource (RFC 8707), sent when the server
+    # advertises it in its protected-resource metadata.
+    resource: str | None = None
 
 
 @dataclass(frozen=True)

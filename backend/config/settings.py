@@ -91,7 +91,7 @@ class Settings(BaseSettings):
     # Every CRM sends the browser back to this backend's
     # /integrations/crm/callback; empty = derived from GOOGLE_OAUTH_REDIRECT_URI.
     crm_oauth_redirect_uri: str | None = None
-    # HubSpot: an "MCP auth app" (HubSpot > Development > MCP Auth Apps) whose
+    # HubSpot: an MCP connector (HubSpot > Development > MCP Connectors) whose
     # redirect URL is the callback above.
     hubspot_mcp_client_id: str | None = None
     hubspot_mcp_client_secret: str | None = None
