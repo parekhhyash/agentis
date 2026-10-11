@@ -92,7 +92,10 @@ def summarize(row: dict[str, Any]) -> str:
             variants = piece.get("variants") or []
             best = next((v for v in variants if v.get("id") == piece.get("recommended_id")), variants[0] if variants else {})
             body = best.get("text") or " / ".join(best.get("parts") or []) or " / ".join(best.get("headlines") or [])
-            posted = ", ".join(f"posted on {p.get('provider')}" for v in variants for p in v.get("published") or [])
+            posted = ", ".join(
+                f"{'saved to' if p.get('provider') in ('notion', 'medium') else 'posted on'} {p.get('provider')}"
+                for v in variants for p in v.get("published") or []
+            )
             lines.append(f"- {piece.get('label')} ({len(variants)} options){' [' + posted + ']' if posted else ''}: "
                          f"{(best.get('title') + ': ') if best.get('title') else ''}{_clip(body, 500)}")
         return "\n".join(lines)

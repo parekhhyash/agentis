@@ -16,13 +16,15 @@ from datetime import datetime
 from typing import Any
 
 from agents.content_copy import checks, formats, prompts
-from agents.content_copy.schemas import ContentResult, Piece, Variant
+from agents.content_copy.schemas import ContentResult, Piece, Requirements, Variant
 from agents.lead_research.llm import LLMClient
 
 logger = logging.getLogger(__name__)
 
 MAX_PIECES = 4
 MAX_VARIANTS = 4
+MAX_WORDS = 6000
+MAX_TOKENS = 16000
 CRITERIA = ("hook", "clarity", "specificity", "voice", "cta")
 
 StepCallback = Callable[[str], Awaitable[None]]
@@ -40,6 +42,43 @@ def _strings(value: Any, limit: int = 20) -> list[str]:
     return [str(v).strip() for v in (value if isinstance(value, list) else []) if str(v).strip()][:limit]
 
 
+def _count(value: Any, ceiling: int) -> int | None:
+    try:
+        number = int(float(value))
+    except (TypeError, ValueError):
+        return None
+    return min(number, ceiling) if number > 0 else None
+
+
+def requirements(raw: Any) -> Requirements:
+    """The brief's requirements, cleaned up: sane numbers, short lists."""
+    raw = raw if isinstance(raw, dict) else {}
+    req = Requirements(
+        min_words=_count(raw.get("min_words"), MAX_WORDS),
+        max_words=_count(raw.get("max_words"), MAX_WORDS),
+        max_characters=_count(raw.get("max_characters"), 50_000),
+        must_include=[s[:120] for s in _strings(raw.get("must_include"), 10)],
+        sections=[s[:80] for s in _strings(raw.get("sections"), 12)],
+        notes=" ".join(str(raw.get("notes") or "").split())[:500],
+    )
+    if req.min_words and req.max_words and req.min_words > req.max_words:
+        req.min_words, req.max_words = req.max_words, req.min_words
+    return req
+
+
+def _target_words(fmt: formats.Format, req: Requirements) -> int:
+    if req.max_words:
+        return req.max_words
+    if req.min_words:
+        return int(req.min_words * 1.2)
+    return fmt.default_words
+
+
+def _token_budget(words: int, count: int) -> int:
+    # About 1.6 tokens per word, plus room for the JSON around each option.
+    return max(2500, min(MAX_TOKENS, (int(words * 1.6) + 200) * count + 400))
+
+
 def _variant(raw: dict[str, Any], shape: str) -> Variant:
     variant = Variant(id=uuid.uuid4().hex[:8], angle=" ".join(str(raw.get("angle") or "").split())[:60])
     variant.text = str(raw.get("text") or "").strip()
@@ -48,6 +87,7 @@ def _variant(raw: dict[str, Any], shape: str) -> Variant:
     if shape in ("article", "email"):
         variant.title = str(raw.get("title") or "").strip() or None
         variant.subtitle = str(raw.get("subtitle") or "").strip() or None
+        variant.tags = [t.lstrip("#") for t in _strings(raw.get("tags"), 8)]
     if shape == "ad":
         variant.headlines = _strings(raw.get("headlines"), 5)
         variant.descriptions = _strings(raw.get("descriptions"), 4)
@@ -65,6 +105,8 @@ def _for_prompt(variant: Variant, fmt: formats.Format) -> dict[str, Any]:
             out["title"] = variant.title
         if variant.subtitle:
             out["subtitle"] = variant.subtitle
+        if variant.tags:
+            out["tags"] = variant.tags
         out["text"] = variant.text
     return out
 
@@ -103,7 +145,7 @@ class ContentAgent:
         facts = _strings(brief.get("facts"), 40)
         allowed = checks.allowed_figures(request, history, _company_text(company), *facts)
 
-        labels = ", ".join(formats.get(str(p.get("format"))).label for p in raw_pieces)
+        labels = ", ".join(self._label(formats.get(str(p.get("format"))), p) for p in raw_pieces)
         await self._step(f"Writing {labels}")
         result.pieces = list(
             await asyncio.gather(*(self._piece(result, raw, facts, company, allowed) for raw in raw_pieces))
@@ -111,37 +153,53 @@ class ContentAgent:
         result.summary = self._summary(result)
         return result
 
+    @staticmethod
+    def _label(fmt: formats.Format, raw: dict[str, Any]) -> str:
+        """General and long-form pieces are named for what they are ("Press release")."""
+        named = " ".join(str(raw.get("label") or "").split())[:40]
+        return named[:1].upper() + named[1:] if named and fmt.id in ("general", "long_form") else fmt.label
+
     async def _piece(
         self, result: ContentResult, raw: dict[str, Any], facts: list[str], company: dict[str, Any], allowed: set[str]
     ) -> Piece:
         fmt = formats.get(str(raw.get("format") or ""))
+        req = requirements(raw.get("requirements"))
+        words = _target_words(fmt, req)
         try:
             count = max(1, min(int(raw.get("variants") or 3), MAX_VARIANTS))
         except (TypeError, ValueError):
             count = 3
+        count = min(count, 1 if words > 2500 else 2 if words > 1500 else count)
+        label = self._label(fmt, raw)
         brief = {k: raw.get(k) for k in ("topic", "audience", "goal", "key_points", "cta", "tone") if raw.get(k)}
+        if req.any():
+            brief["requirements"] = req.model_dump(exclude_defaults=True)
         piece = Piece(
-            id=uuid.uuid4().hex[:8], format=fmt.id, label=fmt.label, platform=fmt.platform, limit=fmt.limit,
-            x_count=fmt.x_count, topic=str(raw.get("topic") or "")[:200],
+            id=uuid.uuid4().hex[:8], format=fmt.id, label=label, platform=fmt.platform, limit=fmt.limit,
+            x_count=fmt.x_count, topic=str(raw.get("topic") or "")[:200], requirements=req,
+            subtitle_label=fmt.subtitle_label if fmt.shape == "article" else None,
+            title_limit=fmt.title_limit, subtitle_limit=fmt.subtitle_limit,
         )
-        system = prompts.WRITE_SYSTEM.format(count=count, label=fmt.label, guidance=fmt.guidance, shape=prompts.SHAPES[fmt.shape])
+        shape = prompts.SHAPES["story" if fmt.id == "medium_story" else fmt.shape].replace("{subtitle}", fmt.subtitle_label.lower())
+        kind = label if label == fmt.label else f"{label} ({fmt.label.lower()})"
+        system = prompts.WRITE_SYSTEM.format(count=count, label=kind, guidance=fmt.guidance, shape=shape)
         user = prompts.WRITE_USER.format(
             company=_company_text(company),
             brief=json.dumps(brief, ensure_ascii=False, indent=1),
             facts="\n".join(f"- {f}" for f in facts) or "(none given)",
         )
-        tokens = 4500 if fmt.shape == "article" else 2500
-        data = await self._json(result, system, user, tokens * (1 if count <= 2 else 2))
+        tokens = _token_budget(words, count)
+        data = await self._json(result, system, user, tokens)
         variants = [_variant(v, fmt.shape) for v in (data.get("variants") or []) if isinstance(v, dict)][:count]
         if not variants:
-            result.notes.append(f"Couldn't write the {fmt.label}; try rephrasing the request.")
+            result.notes.append(f"Couldn't write the {label}; try rephrasing the request.")
             return piece
 
         for v in variants:
-            v.issues = checks.check(v, fmt, allowed)
+            v.issues = checks.check(v, fmt, allowed, req)
         broken = [v for v in variants if any(i.level == "error" for i in v.issues)]
         if broken:
-            await self._step(f"Fixing {len(broken)} {fmt.label} draft{'s' if len(broken) != 1 else ''} that broke the rules")
+            await self._step(f"Fixing {len(broken)} {label} draft{'s' if len(broken) != 1 else ''} that broke the rules")
             problems = "\n".join(
                 f"- option {variants.index(v) + 1}: " + "; ".join(i.message for i in v.issues if i.level == "error") for v in broken
             )
@@ -150,19 +208,19 @@ class ContentAgent:
                 + "\n\n" + prompts.REPAIR_USER.format(problems=problems, count=len(variants))
             )
             try:
-                fixed = await self._json(result, system, repair_user, tokens * 2)
+                fixed = await self._json(result, system, repair_user, min(MAX_TOKENS, tokens + 1500))
                 repaired = [_variant(v, fmt.shape) for v in (fixed.get("variants") or []) if isinstance(v, dict)]
                 if len(repaired) == len(variants):
                     for old, new in zip(variants, repaired):
                         if any(i.level == "error" for i in old.issues):
                             new.id = old.id
-                            new.issues = checks.check(new, fmt, allowed)
+                            new.issues = checks.check(new, fmt, allowed, req)
                             if sum(i.level == "error" for i in new.issues) <= sum(i.level == "error" for i in old.issues):
                                 variants[variants.index(old)] = new
             except Exception as exc:  # noqa: BLE001 - keep the drafts we have
                 logger.warning("Content repair failed: %s", exc)
 
-        await self._step(f"Scoring the {fmt.label} options")
+        await self._step(f"Scoring the {label} options")
         await self._score(result, piece, fmt, brief, variants)
         variants.sort(key=lambda v: (v.score is None, -(v.score or 0)))
         piece.variants = variants
@@ -209,6 +267,9 @@ class ContentAgent:
                 continue
             score = f" ({best.score}/10)" if best.score is not None else ""
             angle = f", the {best.angle.lower()} angle" if best.angle else ""
+            if len(piece.variants) == 1:
+                lines.append(f"Here's the {piece.label.lower() if piece.label[1:2].islower() else piece.label}{score}.")
+                continue
             number = piece.variants.index(best) + 1
-            lines.append(f"{len(piece.variants)} {piece.label} option{'s' if len(piece.variants) != 1 else ''}; I'd go with option {number}{angle}{score}.")
+            lines.append(f"{len(piece.variants)} {piece.label} options; I'd go with option {number}{angle}{score}.")
         return " ".join(lines) or "I couldn't write that; try rephrasing the request."

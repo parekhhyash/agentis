@@ -2,7 +2,7 @@ import { useState } from 'react'
 
 import type { SocialProvider, useSocialConnections } from '../../lib/content'
 
-// The controls inside the LinkedIn / X cards on the Connect page.
+// The controls inside the LinkedIn / X / Notion / Medium cards on the Connect page.
 export default function SocialConnectControls({
   provider,
   social,
@@ -12,6 +12,7 @@ export default function SocialConnectControls({
 }) {
   const status = social.byProvider(provider)
   const [error, setError] = useState<string | null>(null)
+  const [token, setToken] = useState('')
   // Captured once: the page doesn't need to tick to know a token is ending soon.
   const [now] = useState(() => Date.now())
   const busy = social.busy === provider
@@ -39,6 +40,39 @@ export default function SocialConnectControls({
             Disconnect
           </button>
         </div>
+      ) : status.connect_with === 'token' ? (
+        <form
+          className="space-y-2"
+          onSubmit={async (e) => {
+            e.preventDefault()
+            setError(null)
+            const problem = await social.connectWithToken(provider, token.trim())
+            if (problem) setError(problem)
+            else setToken('')
+          }}
+        >
+          <p className="text-xs leading-relaxed text-slate-500">
+            Medium stopped issuing API tokens in 2025. If you made one before then, find it in Medium under Settings,
+            Security and apps, Integration tokens. Without one, use Copy for Medium on a story.
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="password"
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              placeholder="Integration token"
+              autoComplete="off"
+              className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-surface px-3 py-1.5 text-sm text-slate-800 focus:border-sky-400 focus:outline-none"
+            />
+            <button
+              type="submit"
+              disabled={busy || token.trim().length < 10}
+              className="rounded-full bg-brand-blue px-4 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90 disabled:opacity-50"
+            >
+              {busy ? 'Checking…' : 'Connect'}
+            </button>
+          </div>
+        </form>
       ) : (
         <button
           type="button"

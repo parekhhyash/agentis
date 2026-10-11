@@ -40,7 +40,8 @@ The system is built as a **React + TypeScript** frontend (Vite) paired with a **
 - **General Agent** — The default chat agent: answers questions with company and conversation context, or hands the task to the right specialist
 - **CRM integrations over MCP** — Connect **HubSpot**, **Salesforce** or **Zoho CRM** through their official MCP servers. Ask General about contacts, companies and deals, ask it to update records, or add researched leads with one click. Lookups run on their own; every change is a draft you approve; delete and merge tools are never used
 - **Data & Reporting Agent** — Answers questions about numbers with headline figures, charts and tables, from the user's Agentis activity (leads, emails, replies, meetings) and CSV/Excel files they upload. The model plans queries; the backend runs every calculation, and the written summary may only quote numbers that the queries produced
-- **Content & Copy Agent** — Writes LinkedIn posts, X posts and threads, Instagram captions, blog posts, emails and ad copy, several options per piece. The backend checks every option against the platform's real limits (X counts links as 23 and emoji as 2), flags clichés and figures that aren't in the request, fixes rule-breaking drafts once, then scores and recommends one
+- **Content & Copy Agent** — Writes LinkedIn posts, X posts and threads, Instagram captions, blog posts, Medium stories, emails and ad copy, plus any other writing to the user's own requirements (press releases, web pages, product descriptions, scripts), several options per piece. The backend checks every option against the platform's real limits (X counts links as 23 and emoji as 2) and against what the user asked for (word or character limits, phrases to include, sections), flags clichés and figures that aren't in the request, fixes rule-breaking drafts once, then scores and recommends one
+- **Notion and Medium** — Save any draft as a private page in the user's Notion workspace, or a story as a Medium draft (Medium only issues API tokens to accounts that made one before 2025; everyone else gets "Copy for Medium", which pastes with headings and emphasis intact)
 - **LinkedIn and X posting** — Connect a LinkedIn profile or X account and post a chosen option (edited or not) straight from the chat, after a confirm step; X threads go out as a reply chain
 - **Operations Agent (scheduled tasks)** — Put any agent on a schedule in plain words (*"every Monday at 9, report last week's emails and replies and email it to me"*). Each task is 1 to 3 steps run in order into its own chat, daily, weekly, monthly or once, in the user's time zone. Every change is a card the user confirms; runs only draft, so emails, CRM changes and posts still wait for approval. A Scheduled page lists tasks with Run now, Pause, Resume and Delete, and an optional summary email arrives from the user's own Gmail
 - **Conversational Dashboard** — Chat-style UI where each agent request appears as a conversation with real-time progress updates
@@ -184,7 +185,7 @@ agentis_new/
 │   │       ├── AgentProgressView.tsx     # Live progress steps
 │   │       ├── ConnectionsPanel.tsx      # Connect page (Google, CRMs, LinkedIn, X)
 │   │       ├── ContentResultPanel.tsx    # Content options, checks, edit + post
-│   │       ├── SocialConnectControls.tsx # LinkedIn / X connect cards
+│   │       ├── SocialConnectControls.tsx # LinkedIn / X / Notion / Medium connect cards
 │   │       ├── OperationsResultPanel.tsx # Proposed scheduled tasks to confirm
 │   │       ├── ScheduledPanel.tsx        # Scheduled page (run now, pause, delete)
 │   │       └── ProfileMenu.tsx           # User profile dropdown
@@ -217,7 +218,7 @@ agentis_new/
 │   │   ├── outreach.py           # /sales-outreach/* endpoints
 │   │   ├── integrations.py       # /integrations/google/* endpoints
 │   │   ├── content.py            # /content/* endpoints (run, publish)
-│   │   ├── social.py             # /integrations/social/* (LinkedIn, X)
+│   │   ├── social.py             # /integrations/social/* (LinkedIn, X, Notion, Medium)
 │   │   ├── operations.py         # /operations/* (agent, tasks, tick)
 │   │   └── models.py             # Pydantic request/response models
 │   ├── agents/
@@ -244,7 +245,7 @@ agentis_new/
 │   │       └── schemas.py        # Action models (email, reply, meeting)
 │   ├── agents/content_copy/      # Content & Copy: formats, checks, writer + judge
 │   ├── agents/operations/        # Operations: schedule format, proposal checks
-│   ├── integrations/social/      # LinkedIn / X OAuth, encrypted tokens, posting
+│   ├── integrations/social/      # LinkedIn / X / Notion sign-in, Medium tokens, publishing
 │   ├── integrations/google/
 │   │   ├── oauth.py              # OAuth 2.0 flow + token management
 │   │   ├── connections.py        # Encrypted connection storage
@@ -275,7 +276,8 @@ agentis_new/
     └── migrations/
         ├── 20261007000000_google_connections.sql  # Google connections table
         ├── 20261011000000_social_connections.sql  # LinkedIn / X connections
-        └── 20261012000000_operations_scheduler.sql # Scheduled tasks + pg_cron
+        ├── 20261012000000_operations_scheduler.sql # Scheduled tasks + pg_cron
+        └── 20261013000000_notion_medium_connections.sql # Notion / Medium connections
 ```
 
 ---
@@ -428,15 +430,18 @@ Request + company context + earlier turns of the chat
   ▼
 ┌──────────────────────────────────────────────────────────────────┐
 │ 1. Brief               1 call: up to 4 pieces (format, topic,    │
-│                        audience, 1-4 options each) + the facts   │
-│                        the copy may use                          │
+│                        audience, 1-4 options each, and the       │
+│                        user's own requirements) + the facts the  │
+│                        copy may use                              │
 ├──────────────────────────────────────────────────────────────────┤
 │ 2. Write               1 call per piece, in parallel: each       │
 │                        option takes a different angle            │
 ├──────────────────────────────────────────────────────────────────┤
 │ 3. Check               Code checks every option: length against  │
-│    (no model)          the platform limit, empty or missing      │
-│                        parts, placeholders (errors); hashtags,   │
+│    (no model)          the platform limit and the user's word or │
+│                        character limits, phrases they asked to   │
+│                        include, empty parts, placeholders        │
+│                        (errors); missing sections, hashtags,     │
 │                        clichés, em dashes, figures not in the    │
 │                        request, paid X links (warnings)          │
 ├──────────────────────────────────────────────────────────────────┤
@@ -456,10 +461,16 @@ Request + company context + earlier turns of the chat
 | X post / thread | 280 per post as X counts them (links 23, emoji and CJK 2), 2 hashtags |
 | Instagram caption | 2,200 characters, up to 8 hashtags |
 | Blog post | Title ≤ 70, meta description ≤ 155 |
+| Medium story | Title ≤ 100, subtitle ≤ 140, up to 5 tags of ≤ 25 characters (Medium's API uses the first 3) |
 | Email | Subject ≤ 60, preview ≤ 90 |
 | Ad copy | Headlines ≤ 30, descriptions ≤ 90, primary text ≤ 125 |
+| Long-form piece / Copy | Whatever the user asked for: the brief names the piece ("Press release", "Product description") and records its requirements |
+
+**Requirements** — The brief records only what the user explicitly asked for: "about 500 words" becomes 425 to 575, "under 100 words" a maximum, plus character limits, phrases that must appear word for word, section names and other notes (language, reading level, bullet points). They override the format's usual length, are checked in code on every option (and again after an edit), and long pieces get fewer options and a larger writing budget. The chat shows "You asked for: …" with a live word count.
 
 **Posting** — LinkedIn and X options have a "Post to …" button once the network is connected. Posting re-runs the limit checks on the (possibly edited) text, asks for confirmation, then posts as the user: LinkedIn through the Posts API (`w_member_social`), X through `POST /2/tweets` (threads as replies to the previous post). Each option can be posted once per network; the post link is saved on the chat turn. If an X thread fails partway, the posts that went out are recorded.
+
+**Notion and Medium** — Every option has "Save to Notion": a private page at the top of the user's workspace, created from markdown (`POST /v1/pages` with `markdown`, `Notion-Version: 2026-03-11`). Articles (blog posts, Medium stories, long-form pieces) can also be saved as **Medium drafts** (`publishStatus: draft`; the user publishes from Medium). Neither is public, so they skip the confirm step and the limit gate; each option is saved once per destination and the link is kept on the chat turn.
 
 ### Operations Agent (scheduled tasks)
 
@@ -608,9 +619,9 @@ Run `supabase/migrations/20261010000000_crm_connections.sql`. All CRMs return to
 
 **Zoho CRM** — no server setup. Each user opens Zoho CRM > Setup > Developer Hub > **MCP for AI Agents**, copies a server's URL (Data Operations allows changes; Data Insights is read-only) and pastes it on the Connect page.
 
-### 7. LinkedIn / X Setup (Optional — Content & Copy posting)
+### 7. LinkedIn / X / Notion / Medium Setup (Optional — Content & Copy publishing)
 
-Run `supabase/migrations/20261011000000_social_connections.sql`. Both networks return to one callback: `https://<your-backend>/integrations/social/callback` (`SOCIAL_OAUTH_REDIRECT_URI`, defaults to the Google callback's host). `INTEGRATIONS_ENCRYPTION_KEY` must be set. The agent writes content without either; only the post buttons need them.
+Run `supabase/migrations/20261011000000_social_connections.sql` and `20261013000000_notion_medium_connections.sql`. LinkedIn, X and Notion return to one callback: `https://<your-backend>/integrations/social/callback` (`SOCIAL_OAUTH_REDIRECT_URI`, defaults to the Google callback's host). `INTEGRATIONS_ENCRYPTION_KEY` must be set. The agent writes content without either; only the post buttons need them.
 
 **LinkedIn**
 1. At [linkedin.com/developers](https://www.linkedin.com/developers/apps) create an app (it must be linked to a LinkedIn Page).
@@ -625,6 +636,15 @@ LinkedIn access tokens last 60 days and this app type gets no refresh token, so 
 2. User authentication settings: OAuth 2.0, type **Web App**, permissions **Read and write**, callback URL = the social callback.
 3. Set `X_CLIENT_ID` and `X_CLIENT_SECRET` (OAuth 2.0 client ID and secret, not the API key) on the backend.
 4. Buy API credits in the developer console. X API is pay-per-use: each post costs credits (more for posts that contain a link), and posting fails with a clear message when credits run out.
+
+**Notion**
+1. At [notion.so/profile/integrations](https://www.notion.so/profile/integrations) create a **public** integration (public integrations sign users in with OAuth; internal ones can't create workspace-level pages).
+2. Capabilities: **Insert content** (read content is optional). Redirect URI: the social callback above.
+3. Set `NOTION_CLIENT_ID` and `NOTION_CLIENT_SECRET` (the OAuth client ID and secret) on the backend. `NOTION_API_VERSION` defaults to `2026-03-11`, the version that accepts markdown page content.
+
+Pages are created private at the top of the user's workspace. Notion's tokens carry no expiry; if Notion rejects one, the backend refreshes it once with the stored refresh token, and otherwise asks the user to reconnect.
+
+**Medium** — no server setup. Medium stopped issuing integration tokens on 1 January 2025; users who made one before then paste it on the Connect page (Medium > Settings > Security and apps > Integration tokens) and it's checked with `GET /v1/me`. Everyone else uses **Copy for Medium** on a story, which copies it as rich text for Medium's editor.
 
 ### 8. Scheduled Tasks Setup (Operations)
 
@@ -675,6 +695,8 @@ The secret never leaves the database: pg_cron sends it as `X-Operations-Secret`,
 | `LINKEDIN_API_VERSION` | ❌ | `LinkedIn-Version` header, `YYYYMM` (default: `202609`) |
 | `X_CLIENT_ID` / `X_CLIENT_SECRET` | For X posting | X app OAuth 2.0 client credentials |
 | `SOCIAL_OAUTH_REDIRECT_URI` | ❌ | LinkedIn/X callback (default: derived from `GOOGLE_OAUTH_REDIRECT_URI`) |
+| `NOTION_CLIENT_ID` / `NOTION_CLIENT_SECRET` | For Save to Notion | Notion public integration OAuth credentials |
+| `NOTION_API_VERSION` | ❌ | `Notion-Version` header (default: `2026-03-11`) |
 | `OPERATIONS_SCHEDULER_INTERVAL_SECONDS` | ❌ | While awake, check for due scheduled tasks this often (default: `60`, `0` = off) |
 | `OPERATIONS_MAX_TASKS` | ❌ | Scheduled tasks per user (default: `10`) |
 
@@ -766,9 +788,10 @@ The frontend runs at `http://localhost:5173` and the backend at `http://localhos
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
 | `POST` | `/content/run` | ✅ Bearer | Write, check and score content for a request |
-| `POST` | `/content/requests/{id}/publish` | ✅ Bearer | Post one option (`piece_id`, `variant_id`, `provider`, optional edited `text` or `parts`) |
-| `GET` | `/integrations/social` | ✅ Bearer | LinkedIn and X status for the user |
-| `POST` | `/integrations/social/{provider}/connect` | ✅ Bearer | Returns the sign-in URL (`linkedin` or `x`) |
+| `POST` | `/content/requests/{id}/publish` | ✅ Bearer | Post or save one option (`piece_id`, `variant_id`, `provider`: `linkedin`, `x`, `notion` or `medium`, optional edited `text` or `parts`) |
+| `GET` | `/integrations/social` | ✅ Bearer | LinkedIn, X, Notion and Medium status for the user (`connect_with`: `oauth` or `token`) |
+| `POST` | `/integrations/social/{provider}/connect` | ✅ Bearer | Returns the sign-in URL (`linkedin`, `x` or `notion`) |
+| `POST` | `/integrations/social/medium/token` | ✅ Bearer | Checks a pasted Medium integration token and stores it |
 | `GET` | `/integrations/social/callback` | ❌ | OAuth callback (internal) |
 | `DELETE` | `/integrations/social/{provider}` | ✅ Bearer | Disconnect |
 
@@ -899,10 +922,10 @@ The frontend runs at `http://localhost:5173` and the backend at `http://localhos
 
 | Column | Type | Description |
 |---|---|---|
-| `user_id` + `provider` | `uuid` + `text` (PK) | One row per user and network (`linkedin`, `x`) |
-| `account_id` | `text` | LinkedIn member id (OpenID `sub`) or X user id |
-| `account_label` | `text` | Display name or `@handle` |
-| `access_token_encrypted` / `refresh_token_encrypted` | `text` | Fernet-encrypted tokens (X rotates its refresh token on each use) |
+| `user_id` + `provider` | `uuid` + `text` (PK) | One row per user and destination (`linkedin`, `x`, `notion`, `medium`) |
+| `account_id` | `text` | LinkedIn member id (OpenID `sub`), X user id, Notion bot id, or Medium user id |
+| `account_label` | `text` | Display name, `@handle` or Notion workspace name |
+| `access_token_encrypted` / `refresh_token_encrypted` | `text` | Fernet-encrypted tokens (X and Notion rotate refresh tokens; Medium's pasted token is stored here too) |
 | `expires_at` | `timestamptz` | When the access token ends |
 
 > Backend only: RLS on with no policies.
@@ -952,6 +975,7 @@ Test coverage includes:
 - CRM over MCP: tool classification, PKCE and encrypted state, Zoho URL checks, the agent loop and approvals against a real local MCP server, token refresh (`test_crm.py`)
 - Data & Reporting: file parsing, query checks and execution, summary number checks, live reply status (`test_data_reporting.py`)
 - Content & Copy: X character counting, limit and claim checks, repair and scoring, LinkedIn text escaping, X threads (including a partial failure), posting rules, token refresh (`test_content.py`)
+- Content requirements, Notion and Medium: requirement parsing and checks, long-form labels and repair, markdown export, Notion pages and Medium drafts, Notion sign-in and token refresh, Medium token check, where each format can go (`test_content_destinations.py`)
 - Operations: schedule parsing, next run times (time zones, daylight saving, short months), proposal checks and repair, running due tasks step by step, failures and auto-pause, confirming proposals, the tick secret (`test_operations.py`)
 - LLM client behavior (`test_llm.py`)
 - Exa search provider (`test_exa.py`)
@@ -972,7 +996,7 @@ The codebase defines several agent types that are registered in the UI but do no
 | **Sales & Outreach** | ✅ Implemented | Draft and send emails, schedule meetings |
 | **General** | ✅ Implemented | Answers questions and routes tasks to specialist agents |
 | **Data & Reporting** | ✅ Implemented | Reports with charts from Agentis activity and uploaded files |
-| **Content & Copy** | ✅ Implemented | Social posts, threads, blog posts, emails and ad copy; posts to LinkedIn and X |
+| **Content & Copy** | ✅ Implemented | Social posts, threads, blog posts, Medium stories, emails, ad copy and any writing to your requirements; posts to LinkedIn and X, saves to Notion and Medium |
 | **Customer Support** | 🔜 Planned | Ticket resolution and routing |
 | **Operations** | ✅ Implemented | Runs the other agents on a schedule (reports, follow-ups, research, posts) |
 

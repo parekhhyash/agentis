@@ -1,4 +1,5 @@
-"""Rule checks on every variant, in code: platform limits, hashtag counts,
+"""Rule checks on every variant, in code: platform limits, the user's own
+requirements (length, phrases to include, sections), hashtag counts,
 placeholders, stock AI phrases, and figures that didn't come from the user
 (a number the model made up is the costliest mistake in marketing copy)."""
 
@@ -6,7 +7,7 @@ import re
 
 from agents.content_copy import formats
 from agents.content_copy.formats import Format
-from agents.content_copy.schemas import Issue, Variant
+from agents.content_copy.schemas import Issue, Requirements, Variant
 
 CLICHES = (
     "delve", "game-changer", "game changer", "unlock the power", "unleash", "elevate your", "in today's fast-paced",
@@ -52,11 +53,57 @@ def _unsupported(text: str, allowed: set[str]) -> list[str]:
     return out
 
 
+_WORD = re.compile(r"[^\W_](?:[\w'’.-]*[^\W_])?")
+_HEADING = re.compile(r"^\s{0,3}(?:#{1,6}\s+|\*\*)(.+?)(?:\*\*)?\s*$", re.M)
+
+
+def word_count(text: str) -> int:
+    """Words as a reader counts them (markdown symbols and URLs aside)."""
+    return len(_WORD.findall(re.sub(r"https?://\S+", " link ", text or "")))
+
+
+def body(variant: Variant, fmt: Format) -> str:
+    """The main text the length requirements apply to."""
+    if fmt.shape == "thread":
+        return "\n\n".join(variant.parts)
+    if fmt.shape == "ad":
+        return "\n".join([*variant.headlines, *variant.descriptions, variant.text])
+    return variant.text
+
+
+def _squash(text: str) -> str:
+    return " ".join(re.sub(r"[*_`#>]", " ", text).lower().split())
+
+
+def requirement_issues(variant: Variant, fmt: Format, req: Requirements) -> list[Issue]:
+    issues: list[Issue] = []
+    main = body(variant, fmt)
+    words = word_count(main)
+    if req.min_words and words < req.min_words:
+        issues.append(Issue(level="error", message=f"{words} words; you asked for at least {req.min_words}"))
+    if req.max_words and words > req.max_words:
+        issues.append(Issue(level="error", message=f"{words} words; you asked for at most {req.max_words}"))
+    if req.max_characters:
+        size = formats.length(main, fmt)
+        if size > req.max_characters:
+            issues.append(Issue(level="error", message=f"{size} characters; you asked for at most {req.max_characters}"))
+    everything = _squash(all_text(variant))
+    for phrase in req.must_include:
+        if _squash(phrase) and _squash(phrase) not in everything:
+            issues.append(Issue(level="error", message=f"Doesn't include \"{phrase}\", which you asked for"))
+    headings = [_squash(h) for h in _HEADING.findall(variant.text)]
+    for section in req.sections:
+        words_needed = [w for w in _squash(section).split() if len(w) > 3] or _squash(section).split()
+        if not any(all(w in h for w in words_needed) for h in headings):
+            issues.append(Issue(level="warning", message=f"No \"{section}\" section"))
+    return issues
+
+
 def all_text(variant: Variant) -> str:
     return "\n".join([variant.title or "", variant.subtitle or "", variant.text, *variant.parts, *variant.headlines, *variant.descriptions])
 
 
-def check(variant: Variant, fmt: Format, allowed: set[str]) -> list[Issue]:
+def check(variant: Variant, fmt: Format, allowed: set[str], req: Requirements | None = None) -> list[Issue]:
     issues: list[Issue] = []
 
     def error(message: str) -> None:
@@ -94,10 +141,16 @@ def check(variant: Variant, fmt: Format, allowed: set[str]) -> list[Issue]:
         if fmt.shape == "article":
             if not variant.title:
                 error("No title")
-            elif len(variant.title) > formats.BLOG_TITLE_LIMIT:
-                warn(f"Title is {len(variant.title)} characters; search results show about {formats.BLOG_TITLE_LIMIT}")
-            if variant.subtitle and len(variant.subtitle) > formats.META_DESCRIPTION_LIMIT:
-                warn(f"Meta description is {len(variant.subtitle)} characters; keep it to {formats.META_DESCRIPTION_LIMIT}")
+            elif fmt.title_limit and len(variant.title) > fmt.title_limit:
+                where = "search results show" if fmt.id == "blog_post" else "keep it to"
+                warn(f"Title is {len(variant.title)} characters; {where} about {fmt.title_limit}")
+            if variant.subtitle and fmt.subtitle_limit and len(variant.subtitle) > fmt.subtitle_limit:
+                warn(f"{fmt.subtitle_label} is {len(variant.subtitle)} characters; keep it to {fmt.subtitle_limit}")
+            if len(variant.tags) > formats.MAX_TAGS:
+                warn(f"{len(variant.tags)} tags; Medium allows {formats.MAX_TAGS}")
+            long_tags = [t for t in variant.tags if len(t) > formats.TAG_LIMIT]
+            if long_tags:
+                warn(f"Tag \"{long_tags[0][:30]}\" is over {formats.TAG_LIMIT} characters; Medium ignores it")
         if fmt.shape == "email":
             if not variant.title:
                 error("No subject line")
@@ -121,6 +174,8 @@ def check(variant: Variant, fmt: Format, allowed: set[str]) -> list[Issue]:
         warn("Check these figures, they weren't in your brief: " + ", ".join(figures[:5]))
     if fmt.platform == "x" and re.search(r"https?://", text):
         warn("Posts with links cost more through the X API ($0.20 instead of $0.015)")
+    if req:
+        issues.extend(requirement_issues(variant, fmt, req))
     return issues
 
 

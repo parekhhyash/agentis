@@ -17,13 +17,19 @@ class Format:
     id: str
     label: str
     shape: Shape
-    # Where it can be posted from Agentis ("linkedin" / "x"), if anywhere.
+    # Where it can be posted from Agentis ("linkedin" / "x" / "medium"), if anywhere.
     platform: str | None = None
     # Hard limit for the text (or each thread post), in the platform's own count.
     limit: int | None = None
     x_count: bool = False
     max_hashtags: int | None = None
     guidance: str = ""
+    # Articles: what the line under the title is for, and soft limits.
+    subtitle_label: str = "Meta description"
+    title_limit: int | None = None
+    subtitle_limit: int | None = None
+    # Typical length when the user doesn't say (sizes the model's budget).
+    default_words: int = 250
 
 
 FORMATS: dict[str, Format] = {f.id: f for f in (
@@ -50,10 +56,26 @@ FORMATS: dict[str, Format] = {f.id: f for f in (
         "action, then up to eight relevant hashtags at the end.",
     ),
     Format(
-        "blog_post", "Blog post", "article",
+        "blog_post", "Blog post", "article", title_limit=70, subtitle_limit=155, default_words=1000,
         guidance="A title of at most 70 characters, a meta description of at most 155 characters, and a markdown "
         "body of 600 to 1000 words: a short intro that states the problem, \"## \" sections with practical, "
         "specific points, and a conclusion with a call to action.",
+    ),
+    Format(
+        "medium_story", "Medium story", "article", platform="medium", subtitle_label="Subtitle", title_limit=100,
+        subtitle_limit=140, max_hashtags=0, default_words=1300,
+        guidance="A Medium story: a title of at most 100 characters that promises something specific, a one-line "
+        "subtitle of at most 140 characters, and a markdown body of 800 to 1500 words (a 4 to 7 minute read) told "
+        "in the first person from the company's point of view: an opening that hooks with a concrete moment or "
+        "problem, \"## \" sections, short paragraphs, and a closing thought. No hashtags in the text; give up to 5 "
+        "topic tags separately (only the first 3 are used when saved to Medium).",
+    ),
+    Format(
+        "long_form", "Long-form piece", "article", subtitle_label="Summary", default_words=1000,
+        guidance="Write exactly the kind of piece asked for (a web page, landing page, press release, case study, "
+        "guide, script, speech, report, article for another site or any other longer document), in the structure "
+        "that kind of piece normally has, at the length asked for. A title, a one-line summary, and a markdown body "
+        "with \"## \" sections where they help.",
     ),
     Format(
         "email", "Email / newsletter", "email",
@@ -67,17 +89,18 @@ FORMATS: dict[str, Format] = {f.id: f for f in (
         "to action.",
     ),
     Format(
-        "general", "Copy", "post",
-        guidance="Write exactly what was asked (a tagline, product description, bio, script, slogan or similar) at "
-        "a sensible length for it.",
+        "general", "Copy", "post", default_words=150,
+        guidance="Write exactly what was asked (a tagline, product description, bio, short script, slogan, "
+        "announcement, message or similar), in the form that kind of copy normally takes, at the length asked for "
+        "or a sensible length for it.",
     ),
 )}
 
 AD_HEADLINE_LIMIT = 30
 AD_DESCRIPTION_LIMIT = 90
 AD_PRIMARY_LIMIT = 125
-BLOG_TITLE_LIMIT = 70
-META_DESCRIPTION_LIMIT = 155
+MAX_TAGS = 5
+TAG_LIMIT = 25
 EMAIL_SUBJECT_LIMIT = 60
 EMAIL_PREVIEW_LIMIT = 90
 

@@ -10,7 +10,7 @@ import DataFilesPanel from './DataFilesPanel'
 import SocialConnectControls from './SocialConnectControls'
 
 const CRM_IDS = new Set<string>(['hubspot', 'salesforce', 'zoho'])
-const SOCIAL_IDS = new Set<string>(['linkedin', 'x'])
+const SOCIAL_IDS = new Set<string>(['linkedin', 'x', 'notion', 'medium'])
 
 function Tile({ connector }: { connector: ConnectorInfo }) {
   return (

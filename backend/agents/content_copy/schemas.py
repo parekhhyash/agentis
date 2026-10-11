@@ -14,7 +14,7 @@ class Issue(BaseModel):
 
 
 class Publication(BaseModel):
-    provider: Literal["linkedin", "x"]
+    provider: Literal["linkedin", "x", "notion", "medium"]
     url: str
     posted_at: str
     # How many posts went out (a thread can stop part way).
@@ -35,11 +35,30 @@ class Variant(BaseModel):
     subtitle: str | None = None
     headlines: list[str] = Field(default_factory=list)
     descriptions: list[str] = Field(default_factory=list)
+    # Medium topic tags.
+    tags: list[str] = Field(default_factory=list)
     score: float | None = None
     scores: dict[str, float] = Field(default_factory=dict)
     reason: str = ""
     issues: list[Issue] = Field(default_factory=list)
     published: list[Publication] = Field(default_factory=list)
+
+
+class Requirements(BaseModel):
+    """What the user explicitly asked for; checked in code on every draft."""
+
+    min_words: int | None = None
+    max_words: int | None = None
+    max_characters: int | None = None
+    # Phrases that must appear word for word (keywords, a product name, a link).
+    must_include: list[str] = Field(default_factory=list)
+    # Sections the piece must have, by name.
+    sections: list[str] = Field(default_factory=list)
+    # Anything else they asked for (language, reading level, point of view).
+    notes: str = ""
+
+    def any(self) -> bool:
+        return bool(self.min_words or self.max_words or self.max_characters or self.must_include or self.sections or self.notes)
 
 
 class Piece(BaseModel):
@@ -50,6 +69,11 @@ class Piece(BaseModel):
     limit: int | None = None
     x_count: bool = False
     topic: str = ""
+    requirements: Requirements = Field(default_factory=Requirements)
+    # Articles: the line under the title, and soft limits for both.
+    subtitle_label: str | None = None
+    title_limit: int | None = None
+    subtitle_limit: int | None = None
     variants: list[Variant] = Field(default_factory=list)
     recommended_id: str | None = None
 

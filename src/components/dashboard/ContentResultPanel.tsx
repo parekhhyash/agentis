@@ -2,20 +2,44 @@ import { useState } from 'react'
 
 import { BackendApiError } from '../../lib/backendApi'
 import {
+  copyForMedium,
+  destinationsFor,
   publishVariant,
+  requirementsText,
   SHAPES,
   textLength,
   variantAsText,
+  wordCount,
   type ContentPiece,
   type ContentResult,
   type ContentVariant,
+  type Publication,
   type SocialProvider,
   type useSocialConnections,
 } from '../../lib/content'
 import RichText from './RichText'
 
-const NETWORK: Record<SocialProvider, string> = { linkedin: 'LinkedIn', x: 'X' }
+const NETWORK: Record<SocialProvider, string> = { linkedin: 'LinkedIn', x: 'X', notion: 'Notion', medium: 'Medium' }
 const CRITERIA = ['hook', 'clarity', 'specificity', 'voice', 'cta'] as const
+const PUBLIC: SocialProvider[] = ['linkedin', 'x']
+
+function publishedText(pub: Publication): string {
+  if (pub.provider === 'notion') return 'Saved to Notion · Open'
+  if (pub.provider === 'medium') return 'Medium draft saved · Open'
+  return `Posted on ${NETWORK[pub.provider]}${pub.posts > 1 ? ` (${pub.posts} posts)` : ''} · View`
+}
+
+// "612 words", red when outside what the user asked for.
+function Words({ text, piece }: { text: string; piece: ContentPiece }) {
+  const count = wordCount(text)
+  const req = piece.requirements
+  const off = Boolean(req && ((req.min_words && count < req.min_words) || (req.max_words && count > req.max_words)))
+  return (
+    <span className={`text-[11px] tabular-nums ${off ? 'font-semibold text-red-600' : 'text-slate-400'}`}>
+      {count.toLocaleString('en-US')} words
+    </span>
+  )
+}
 
 function Counter({ value, limit, xCount }: { value: string; limit: number | null; xCount: boolean }) {
   if (!limit) return null
@@ -109,12 +133,32 @@ function Body({
     )
   }
   if (shape === 'article') {
+    // Older blog results predate the per-piece labels and limits.
+    const subtitleLabel = piece.subtitle_label ?? 'Meta description'
+    const subtitleLimit = piece.subtitle_limit ?? (piece.format === 'blog_post' ? 155 : undefined)
     return (
       <div className="space-y-2">
-        <h4 className="text-base font-semibold text-slate-900">{variant.title}</h4>
-        <Field label="Meta description" value={variant.subtitle} limit={155} />
+        <div className="flex items-baseline justify-between gap-3">
+          <h4 className="text-base font-semibold text-slate-900">{variant.title}</h4>
+          {variant.title && piece.title_limit && <Counter value={variant.title} limit={piece.title_limit} xCount={false} />}
+        </div>
+        <Field label={subtitleLabel} value={variant.subtitle} limit={subtitleLimit ?? undefined} />
         <div className="max-h-96 overflow-y-auto rounded-lg border border-slate-200 px-3 py-2">
           <RichText text={variant.text} />
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          {variant.tags && variant.tags.length > 0 ? (
+            <ul className="flex flex-wrap gap-1.5">
+              {variant.tags.map((tag) => (
+                <li key={tag} className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
+                  {tag}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <span />
+          )}
+          <Words text={variant.text} piece={piece} />
         </div>
       </div>
     )
@@ -135,7 +179,8 @@ function Body({
       ) : (
         <p className="rounded-lg border border-slate-200 px-3 py-2 text-sm whitespace-pre-wrap text-slate-800">{draft.text}</p>
       )}
-      <div className="mt-1 text-right">
+      <div className="mt-1 flex justify-end gap-3">
+        {(piece.requirements?.min_words || piece.requirements?.max_words || !piece.limit) && <Words text={draft.text} piece={piece} />}
         <Counter value={draft.text} limit={piece.limit} xCount={piece.x_count} />
       </div>
     </div>
@@ -160,15 +205,22 @@ function PieceCard({
   const [drafts, setDrafts] = useState<Record<string, { text: string; parts: string[] }>>({})
   const [editing, setEditing] = useState(false)
   const [confirming, setConfirming] = useState(false)
-  const [posting, setPosting] = useState(false)
+  const [busy, setBusy] = useState<SocialProvider | null>(null)
   const [message, setMessage] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null)
 
   if (!variant) return null
   const draft = drafts[variant.id] ?? { text: variant.text, parts: variant.parts }
   const edited = draft.text !== variant.text || draft.parts.join('\u0000') !== variant.parts.join('\u0000')
-  const network = piece.platform
+  const places = destinationsFor(piece)
+  // The piece's own network (LinkedIn / X) gets the main button and a confirm step.
+  const network = places.find((p) => PUBLIC.includes(p)) ?? null
   const status = network ? social.byProvider(network) : null
   const published = network ? variant.published.find((p) => p.provider === network) : undefined
+  const done = (provider: SocialProvider) => variant.published.some((p) => p.provider === provider)
+  const notion = social.byProvider('notion')
+  const medium = social.byProvider('medium')
+  const mediumStory = piece.format === 'medium_story'
+  const asked = requirementsText(piece.requirements)
   const overLimit =
     piece.limit != null &&
     (SHAPES[piece.format] === 'thread'
@@ -185,33 +237,45 @@ function PieceCard({
     }
   }
 
-  async function post() {
-    if (!network) return
-    setPosting(true)
+  async function publish(provider: SocialProvider) {
+    setBusy(provider)
     setMessage(null)
     try {
       const updated = await publishVariant(requestId, {
         piece_id: piece.id,
         variant_id: variant.id,
-        provider: network,
+        provider,
         ...(edited ? (SHAPES[piece.format] === 'thread' ? { parts: draft.parts } : { text: draft.text }) : {}),
       })
       onPieceChange({ ...piece, variants: piece.variants.map((v) => (v.id === updated.id ? updated : v)) })
       setEditing(false)
       setConfirming(false)
     } catch (err) {
-      setMessage({ tone: 'error', text: err instanceof BackendApiError ? err.message : 'Posting failed' })
+      const fallback = PUBLIC.includes(provider) ? 'Posting failed' : `Saving to ${NETWORK[provider]} failed`
+      setMessage({ tone: 'error', text: err instanceof BackendApiError ? err.message : fallback })
       setConfirming(false)
     } finally {
-      setPosting(false)
+      setBusy(null)
     }
   }
+
+  async function copyMedium() {
+    try {
+      await copyForMedium({ ...variant, text: draft.text }, piece.format)
+      setMessage({ tone: 'ok', text: 'Copied with formatting. Paste it into a new Medium story.' })
+    } catch {
+      setMessage({ tone: 'error', text: 'Copy failed; select the text instead' })
+    }
+  }
+
+  const secondary = 'rounded-full border border-slate-300 px-3 py-1 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50'
 
   return (
     <section className="rounded-xl border border-slate-200 bg-surface p-4">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <h4 className="text-sm font-semibold text-slate-900">{piece.label}</h4>
         {piece.topic && <span className="min-w-0 truncate text-xs text-slate-500">{piece.topic}</span>}
+        {asked && <p className="w-full text-xs text-slate-500">You asked for: {asked}</p>}
       </div>
 
       {piece.variants.length > 1 && (
@@ -268,59 +332,91 @@ function PieceCard({
       )}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <button type="button" onClick={() => void copy()} className="rounded-full border border-slate-300 px-3 py-1 text-sm text-slate-700 hover:bg-slate-50">
+        <button type="button" onClick={() => void copy()} className={secondary}>
           Copy
         </button>
         {(SHAPES[piece.format] === 'post' || SHAPES[piece.format] === 'thread') && !published && (
-          <button
-            type="button"
-            onClick={() => setEditing((v) => !v)}
-            className="rounded-full border border-slate-300 px-3 py-1 text-sm text-slate-700 hover:bg-slate-50"
-          >
+          <button type="button" onClick={() => setEditing((v) => !v)} className={secondary}>
             {editing ? 'Done editing' : 'Edit'}
           </button>
         )}
-        {network &&
-          (published ? (
-            <a href={published.url} target="_blank" rel="noreferrer" className="ml-auto text-sm font-medium text-emerald-700 hover:underline">
-              Posted on {NETWORK[network]}
-              {published.posts > 1 ? ` (${published.posts} posts)` : ''} &middot; View
-            </a>
-          ) : !status?.configured ? (
-            <span className="ml-auto text-xs text-slate-400">{NETWORK[network]} posting isn&rsquo;t set up on the server</span>
-          ) : !status.connected ? (
-            <button type="button" onClick={onOpenConnect} className="ml-auto text-sm font-medium text-sky-600 hover:underline">
-              Connect {NETWORK[network]} to post
+        {mediumStory && !medium?.connected && (
+          <>
+            <button type="button" onClick={() => void copyMedium()} className={secondary}>
+              Copy for Medium
             </button>
-          ) : confirming ? (
-            <span className="ml-auto flex flex-wrap items-center gap-2 text-sm">
-              <span className="text-slate-600">
-                Post publicly as {status.account}?{network === 'x' ? ' Uses X API credits.' : ''}
-              </span>
-              <button type="button" onClick={() => setConfirming(false)} className="rounded-full px-3 py-1 text-slate-500 hover:bg-slate-100">
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={posting}
-                onClick={() => void post()}
-                className="rounded-full bg-brand-blue px-3.5 py-1 font-semibold text-white hover:bg-brand-blue/90 disabled:opacity-50"
-              >
-                {posting ? 'Posting…' : 'Post now'}
-              </button>
-            </span>
-          ) : (
+            <a href="https://medium.com/new-story" target="_blank" rel="noreferrer" className="text-sm font-medium text-sky-600 hover:underline">
+              Open Medium
+            </a>
+          </>
+        )}
+
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+          {notion?.configured && !done('notion') && (
             <button
               type="button"
-              disabled={overLimit}
-              title={overLimit ? 'Shorten it to fit the limit first' : undefined}
-              onClick={() => setConfirming(true)}
-              className="ml-auto rounded-full bg-brand-blue px-3.5 py-1 text-sm font-semibold text-white hover:bg-brand-blue/90 disabled:opacity-50"
+              disabled={busy !== null}
+              onClick={() => (notion.connected ? void publish('notion') : onOpenConnect())}
+              title={notion.connected ? `Save as a private page in ${notion.account ?? 'Notion'}` : 'Connect Notion first'}
+              className={secondary}
             >
-              Post to {NETWORK[network]}
+              {busy === 'notion' ? 'Saving…' : 'Save to Notion'}
             </button>
-          ))}
+          )}
+          {places.includes('medium') && medium?.connected && !done('medium') && (
+            <button type="button" disabled={busy !== null} onClick={() => void publish('medium')} className={secondary}>
+              {busy === 'medium' ? 'Saving…' : 'Save Medium draft'}
+            </button>
+          )}
+          {network &&
+            !published &&
+            (!status?.configured ? (
+              <span className="text-xs text-slate-400">{NETWORK[network]} posting isn&rsquo;t set up on the server</span>
+            ) : !status.connected ? (
+              <button type="button" onClick={onOpenConnect} className="text-sm font-medium text-sky-600 hover:underline">
+                Connect {NETWORK[network]} to post
+              </button>
+            ) : confirming ? (
+              <span className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="text-slate-600">
+                  Post publicly as {status.account}?{network === 'x' ? ' Uses X API credits.' : ''}
+                </span>
+                <button type="button" onClick={() => setConfirming(false)} className="rounded-full px-3 py-1 text-slate-500 hover:bg-slate-100">
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={busy !== null}
+                  onClick={() => void publish(network)}
+                  className="rounded-full bg-brand-blue px-3.5 py-1 font-semibold text-white hover:bg-brand-blue/90 disabled:opacity-50"
+                >
+                  {busy === network ? 'Posting…' : 'Post now'}
+                </button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                disabled={overLimit || busy !== null}
+                title={overLimit ? 'Shorten it to fit the limit first' : undefined}
+                onClick={() => setConfirming(true)}
+                className="rounded-full bg-brand-blue px-3.5 py-1 text-sm font-semibold text-white hover:bg-brand-blue/90 disabled:opacity-50"
+              >
+                Post to {NETWORK[network]}
+              </button>
+            ))}
+        </div>
       </div>
+      {variant.published.length > 0 && (
+        <ul className="mt-2 flex flex-wrap justify-end gap-x-4 gap-y-1">
+          {variant.published.map((pub) => (
+            <li key={pub.provider}>
+              <a href={pub.url} target="_blank" rel="noreferrer" className="text-sm font-medium text-emerald-700 hover:underline">
+                {publishedText(pub)}
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
       {message && <p className={`mt-2 text-xs ${message.tone === 'ok' ? 'text-emerald-700' : 'text-red-700'}`}>{message.text}</p>}
     </section>
   )

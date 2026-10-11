@@ -127,6 +127,21 @@ Both use `https://<backend>/integrations/social/callback`. Set
 `X_CLIENT_SECRET`; app setup steps are in the root README. X posting uses
 the account's pay-per-use API credits.
 
+Requirements: the brief records only what the user explicitly asked for
+(word or character limits, phrases to include, sections, other notes) as
+`Piece.requirements`; `checks.requirement_issues` checks them on every draft,
+so a miss triggers the repair round like a platform limit. `long_form` and
+`general` pieces are named for what they are ("Press release"), and long
+pieces get fewer options and a token budget sized to their length.
+
+Notion and Medium (`integrations/social/`): Notion is a public integration
+(OAuth, HTTP Basic client auth); "Save to Notion" creates a private
+workspace-level page from markdown (`agents/content_copy/export.py`) with
+`Notion-Version: 2026-03-11`, refreshing the token once if Notion rejects it.
+Medium has no OAuth for new apps: `POST /integrations/social/medium/token`
+checks a pasted pre-2025 integration token, and articles save as Medium
+drafts. Neither is public, so neither has a confirm step or the limit gate.
+
 ## How the Operations Agent works
 
 ```

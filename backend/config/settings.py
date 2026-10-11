@@ -120,6 +120,12 @@ class Settings(BaseSettings):
     # X app with OAuth 2.0 (type "Web App"); posting is billed per post.
     x_client_id: str | None = None
     x_client_secret: str | None = None
+    # Notion public integration ("Save to Notion"); same callback as LinkedIn/X.
+    notion_client_id: str | None = None
+    notion_client_secret: str | None = None
+    notion_api_version: str = "2026-03-11"
+    # Medium needs nothing here: it stopped issuing API tokens in 2025, and
+    # users who still have one paste it on the Connect page.
 
     # --- Operations (scheduled tasks) --------------------------------
     # While the backend is awake it also checks for due tasks this often

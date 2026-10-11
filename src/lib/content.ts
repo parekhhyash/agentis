@@ -25,11 +25,21 @@ export interface ContentVariant {
   subtitle: string | null
   headlines: string[]
   descriptions: string[]
+  tags?: string[]
   score: number | null
   scores: Record<string, number>
   reason: string
   issues: ContentIssue[]
   published: Publication[]
+}
+
+export interface Requirements {
+  min_words: number | null
+  max_words: number | null
+  max_characters: number | null
+  must_include: string[]
+  sections: string[]
+  notes: string
 }
 
 export interface ContentPiece {
@@ -40,6 +50,11 @@ export interface ContentPiece {
   limit: number | null
   x_count: boolean
   topic: string
+  // Older results don't have these.
+  requirements?: Requirements
+  subtitle_label?: string | null
+  title_limit?: number | null
+  subtitle_limit?: number | null
   variants: ContentVariant[]
   recommended_id: string | null
 }
@@ -64,7 +79,114 @@ export const SHAPES: Record<string, 'post' | 'thread' | 'article' | 'email' | 'a
   blog_post: 'article',
   email: 'email',
   ad_copy: 'ad',
+  medium_story: 'article',
+  long_form: 'article',
   general: 'post',
+}
+
+// Words as a reader counts them (backend/agents/content_copy/checks.py).
+export function wordCount(text: string): number {
+  return (text.replace(/https?:\/\/\S+/g, ' link ').match(/[\p{L}\p{N}](?:[\p{L}\p{N}'’.-]*[\p{L}\p{N}])?/gu) ?? []).length
+}
+
+// What the user asked for, as one line: "500–700 words · include "free delivery"".
+export function requirementsText(req: Requirements | undefined): string {
+  if (!req) return ''
+  const parts: string[] = []
+  const words = (n: number) => n.toLocaleString('en-US')
+  if (req.min_words && req.max_words) parts.push(`${words(req.min_words)}–${words(req.max_words)} words`)
+  else if (req.max_words) parts.push(`at most ${words(req.max_words)} words`)
+  else if (req.min_words) parts.push(`at least ${words(req.min_words)} words`)
+  if (req.max_characters) parts.push(`at most ${words(req.max_characters)} characters`)
+  if (req.must_include.length) parts.push(`include ${req.must_include.map((p) => `“${p}”`).join(', ')}`)
+  if (req.sections.length) parts.push(`sections: ${req.sections.join(', ')}`)
+  if (req.notes) parts.push(req.notes)
+  return parts.join(' · ')
+}
+
+// Where an option can go: Notion takes anything, Medium any article, LinkedIn
+// and X their own formats (backend/services/content_runner.py destinations).
+export function destinationsFor(piece: ContentPiece): SocialProvider[] {
+  const places: SocialProvider[] = []
+  if (piece.platform === 'linkedin' || piece.platform === 'x') places.push(piece.platform)
+  if (SHAPES[piece.format] === 'article') places.push('medium')
+  places.push('notion')
+  return places
+}
+
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
+function inlineHtml(text: string): string {
+  return escapeHtml(text)
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|[^*])\*([^*]+)\*/g, '$1<em>$2</em>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2">$1</a>')
+}
+
+// The small markdown subset the agent writes, as HTML, so a story pasted into
+// an editor like Medium's keeps its headings, lists and emphasis.
+export function markdownToHtml(markdown: string): string {
+  const out: string[] = []
+  let list: 'ul' | 'ol' | null = null
+  const close = () => {
+    if (list) out.push(`</${list}>`)
+    list = null
+  }
+  for (const raw of markdown.split('\n')) {
+    const line = raw.trimEnd()
+    const heading = line.match(/^(#{1,4})\s+(.*)$/)
+    const bullet = line.match(/^\s*[-*]\s+(.*)$/)
+    const numbered = line.match(/^\s*\d+[.)]\s+(.*)$/)
+    if (heading) {
+      close()
+      const level = Math.min(heading[1].length, 4)
+      out.push(`<h${level}>${inlineHtml(heading[2])}</h${level}>`)
+    } else if (bullet || numbered) {
+      const kind = bullet ? 'ul' : 'ol'
+      if (list !== kind) {
+        close()
+        out.push(`<${kind}>`)
+        list = kind
+      }
+      out.push(`<li>${inlineHtml((bullet ?? numbered)![1])}</li>`)
+    } else if (line.startsWith('>')) {
+      close()
+      out.push(`<blockquote>${inlineHtml(line.replace(/^>\s?/, ''))}</blockquote>`)
+    } else if (line.trim()) {
+      close()
+      out.push(`<p>${inlineHtml(line)}</p>`)
+    } else {
+      close()
+    }
+  }
+  close()
+  return out.join('')
+}
+
+// An article as it reads: title, the line under it (a blog post's meta
+// description is metadata, so it's left out), then the body.
+function storyMarkdown(variant: ContentVariant, format: string): string {
+  const subtitle = format !== 'blog_post' && variant.subtitle ? `*${variant.subtitle}*` : ''
+  return [variant.title && `# ${variant.title}`, subtitle, variant.text].filter(Boolean).join('\n\n')
+}
+
+// A story for Medium's editor: title, subtitle and body as rich text.
+export async function copyForMedium(variant: ContentVariant, format: string): Promise<void> {
+  const markdown = storyMarkdown(variant, format)
+  const html = markdownToHtml(markdown)
+  if (typeof ClipboardItem !== 'undefined' && navigator.clipboard.write) {
+    await navigator.clipboard.write([
+      new ClipboardItem({
+        'text/html': new Blob([html], { type: 'text/html' }),
+        'text/plain': new Blob([markdown], { type: 'text/plain' }),
+      }),
+    ])
+    return
+  }
+  await navigator.clipboard.writeText(markdown)
 }
 
 // Characters as X counts them (backend/agents/content_copy/formats.py): every
@@ -103,7 +225,7 @@ export function variantAsText(variant: ContentVariant, format: string): string {
     ]
       .filter(Boolean)
       .join('\n')
-  if (shape === 'article') return [variant.title && `# ${variant.title}`, variant.text].filter(Boolean).join('\n\n')
+  if (shape === 'article') return storyMarkdown(variant, format)
   if (shape === 'email')
     return [variant.title && `Subject: ${variant.title}`, variant.subtitle && `Preview: ${variant.subtitle}`, variant.text]
       .filter(Boolean)
@@ -120,7 +242,7 @@ export function publishVariant(
 
 // --- LinkedIn / X connections ---------------------------------------------------
 
-export type SocialProvider = 'linkedin' | 'x'
+export type SocialProvider = 'linkedin' | 'x' | 'notion' | 'medium'
 
 export interface SocialStatus {
   provider: SocialProvider
@@ -129,6 +251,7 @@ export interface SocialStatus {
   connected: boolean
   account: string | null
   expires_at: string | null
+  connect_with: 'oauth' | 'token'
 }
 
 export function useSocialConnections(enabled = true) {
@@ -168,6 +291,20 @@ export function useSocialConnections(enabled = true) {
     }
   }
 
+  // Medium: a pasted integration token, checked by the server.
+  async function connectWithToken(provider: SocialProvider, token: string): Promise<string | null> {
+    setBusy(provider)
+    try {
+      await authedFetch(`/integrations/social/${provider}/token`, { method: 'POST', body: JSON.stringify({ token }) })
+      await refresh()
+      return null
+    } catch (err) {
+      return err instanceof Error ? err.message : 'Could not connect'
+    } finally {
+      setBusy(null)
+    }
+  }
+
   async function disconnect(provider: SocialProvider) {
     setBusy(provider)
     try {
@@ -179,5 +316,5 @@ export function useSocialConnections(enabled = true) {
   }
 
   const byProvider = (p: SocialProvider) => providers?.find((s) => s.provider === p) ?? null
-  return { providers, error, busy, connect, disconnect, refresh, byProvider }
+  return { providers, error, busy, connect, connectWithToken, disconnect, refresh, byProvider }
 }

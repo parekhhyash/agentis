@@ -63,3 +63,8 @@ services:
         sync: false
       - key: X_CLIENT_SECRET
         sync: false
+      # Notion "Save to Notion": public integration, same callback.
+      - key: NOTION_CLIENT_ID
+        sync: false
+      - key: NOTION_CLIENT_SECRET
+        sync: false

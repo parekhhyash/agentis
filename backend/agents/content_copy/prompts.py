@@ -1,17 +1,32 @@
-BRIEF_SYSTEM = """You are the Content & Copy agent inside Agentis, writing marketing content for the \
-user's company. First, turn the request into a brief.
+BRIEF_SYSTEM = """You are the Content & Copy agent inside Agentis, writing content for the user's \
+company. First, turn the request into a brief.
 
-Formats you can write: linkedin_post, x_post, x_thread, instagram_caption, blog_post, email, \
-ad_copy, general (taglines, product descriptions, bios, scripts and anything else).
+Formats you can write:
+- linkedin_post, x_post, x_thread, instagram_caption, blog_post, email (also newsletters), ad_copy
+- medium_story: a story for Medium
+- long_form: any longer piece that isn't one of the above: web pages and landing pages, press releases, \
+case studies, guides, scripts, speeches, reports, articles for other sites, documents
+- general: any shorter piece that isn't one of the above: taglines, slogans, product descriptions, bios, \
+announcements, messages, short scripts, FAQs, captions for other platforms
 
 Return only JSON:
-{"pieces": [{"format": "<format>", "topic": "<what this piece is about>", "audience": "...", \
-"goal": "...", "key_points": ["..."], "cta": "...", "tone": "...", "variants": <1-4>}],
+{"pieces": [{"format": "<format>", "label": "<for long_form and general: what it is, like \
+'Press release' or 'Product description'>", "topic": "<what this piece is about>", "audience": "...", \
+"goal": "...", "key_points": ["..."], "cta": "...", "tone": "...", "variants": <1-4>,
+  "requirements": {"min_words": <n or null>, "max_words": <n or null>, "max_characters": <n or null>, \
+"must_include": ["..."], "sections": ["..."], "notes": "..."}}],
  "facts": ["every concrete fact, figure, name, date or link the user gave, word for word"]}
 
-- One piece per format the user wants ("a LinkedIn post and a tweet" is two pieces). At most 4 pieces.
-- variants: how many options to write. Default 3 for posts, captions and ads; 2 for blog posts and emails; \
-what the user asked for if they said.
+- One piece per kind of content the user wants ("a LinkedIn post and a tweet" is two pieces). At most 4.
+- variants: how many options to write. Default 3 for posts, captions, ads and short copy; 2 for blog \
+posts, emails, Medium stories and long-form pieces; 1 for anything over 1,500 words; what the user asked \
+for if they said.
+- requirements holds only what the user explicitly asked for; leave the rest null or empty. Length: \
+"about 500 words" is min 425 and max 575; "under 100 words" or "at most 100" is max 100; "at least 800" \
+is min 800; "300 to 400 words" is min 300 and max 400; character limits go in max_characters. \
+must_include: exact words they said must appear (keywords, a product or brand name, a link, a hashtag). \
+sections: section names they listed. notes: any other instruction (language, reading level, point of \
+view, format such as bullet points or a table).
 - Use the conversation for follow-ups ("make it shorter", "now one for X"): the brief should reflect the \
 latest request with earlier details carried over.
 - Never add facts the user didn't give; key points can reframe the company profile."""
@@ -34,6 +49,10 @@ publishable as is.
 FORMAT: {label}
 {guidance}
 
+If the brief has requirements, they come from the user and override the format's usual length and \
+structure: meet every one exactly (word and character limits, phrases to include word for word, the \
+sections named, and the notes).
+
 Rules:
 - Write for the stated audience in plain, specific, confident language. No buzzwords or stock phrases \
 (no "delve", "game-changer", "unlock", "elevate", "seamless", "in today's fast-paced world").
@@ -47,7 +66,8 @@ Return only JSON: {{"variants": [{shape}]}}"""
 SHAPES = {
     "post": '{"angle": "...", "text": "..."}',
     "thread": '{"angle": "...", "parts": ["post 1", "post 2", "..."]}',
-    "article": '{"angle": "...", "title": "...", "subtitle": "<meta description>", "text": "<markdown body>"}',
+    "article": '{"angle": "...", "title": "...", "subtitle": "<{subtitle}>", "text": "<markdown body>"}',
+    "story": '{"angle": "...", "title": "...", "subtitle": "<subtitle>", "text": "<markdown body>", "tags": ["up to 5 topic tags"]}',
     "email": '{"angle": "...", "title": "<subject line>", "subtitle": "<preview line>", "text": "<body>"}',
     "ad": '{"angle": "...", "headlines": ["", "", ""], "descriptions": ["", ""], "text": "<primary text>"}',
 }

@@ -95,10 +95,14 @@ export default function DashboardPage() {
   if (socialResult && `${socialResult}:${socialProvider}` !== handledSocialResult) {
     setHandledSocialResult(`${socialResult}:${socialProvider}`)
     setView('connect')
-    const name = socialProvider === 'x' ? 'X' : 'LinkedIn'
+    const name = { x: 'X', notion: 'Notion', medium: 'Medium' }[socialProvider ?? ''] ?? 'LinkedIn'
+    const done =
+      socialProvider === 'notion'
+        ? 'Notion connected. Content & Copy drafts now have a Save to Notion button.'
+        : `${name} connected. Content & Copy drafts for ${name} now have a Post button.`
     setNotice(
       socialResult === 'connected'
-        ? { tone: 'ok', text: `${name} connected. Content & Copy drafts for ${name} now have a Post button.` }
+        ? { tone: 'ok', text: done }
         : { tone: 'error', text: returnMessage ?? `${name} could not be connected.` },
     )
   }

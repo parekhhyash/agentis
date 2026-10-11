@@ -1,4 +1,5 @@
-"""Posting to LinkedIn (Posts API) and X (API v2)."""
+"""Publishing: posts to LinkedIn (Posts API) and X (API v2), private pages in
+Notion (created from markdown) and drafts on Medium."""
 
 import re
 from dataclasses import dataclass
@@ -9,6 +10,11 @@ from integrations.social.providers import SocialError
 
 LINKEDIN_POSTS = "https://api.linkedin.com/rest/posts"
 X_TWEETS = "https://api.x.com/2/tweets"
+NOTION_PAGES = "https://api.notion.com/v1/pages"
+MEDIUM_API = "https://api.medium.com/v1"
+# Medium uses the first three tags and ignores longer ones.
+MEDIUM_TAGS = 3
+MEDIUM_TAG_LENGTH = 25
 
 # LinkedIn's "little text" format reserves these; unescaped, a "(" can cut the
 # post off at that point.
@@ -20,6 +26,10 @@ _HASHTAG = re.compile(r"(?<![\w#&])#(\w+)")
 class Posted:
     url: str
     posts: int = 1
+
+
+class Unauthorized(SocialError):
+    """The network rejected the token (it may only need refreshing)."""
 
 
 def linkedin_commentary(text: str) -> str:
@@ -34,19 +44,23 @@ def linkedin_commentary(text: str) -> str:
     return "".join(out)
 
 
-def _api_error(name: str, response: httpx.Response) -> SocialError:
+def _api_error(name: str, response: httpx.Response, action: str = "publish the post") -> SocialError:
     try:
         data = response.json()
     except ValueError:
         data = {}
+    if not isinstance(data, dict):
+        data = {}
     detail = data.get("detail") or data.get("message") or data.get("title") or (data.get("errors") or [{}])[0].get("message")
     if response.status_code == 401:
-        return SocialError(f"{name} rejected the connection; connect it again on the Connect page", 409)
+        return Unauthorized(f"{name} rejected the connection; connect it again on the Connect page", 409)
     if response.status_code == 402 or "credit" in str(detail).lower():
         return SocialError(f"{name} says the account has no API credits left: {detail or 'payment required'}", 402)
     if response.status_code == 429:
         return SocialError(f"{name} rate limit reached; try again later", 429)
-    return SocialError(f"{name} didn't publish the post: {detail or f'HTTP {response.status_code}'}", 502)
+    if name == "Notion" and response.status_code in (403, 404):
+        return SocialError(f"Notion didn't allow it: {detail or 'no access'}. Reconnect Notion and allow page access.", 409)
+    return SocialError(f"{name} didn't {action}: {detail or f'HTTP {response.status_code}'}", 502)
 
 
 async def post_linkedin(client: httpx.AsyncClient, token: str, member_id: str, text: str, api_version: str) -> Posted:
@@ -100,3 +114,43 @@ async def post_x(client: httpx.AsyncClient, token: str, username: str | None, pa
         if not first_url:
             first_url = f"https://x.com/{username or 'i'}/status/{tweet_id}" if username else f"https://x.com/i/web/status/{tweet_id}"
     return Posted(first_url, sent)
+
+
+async def save_notion(client: httpx.AsyncClient, token: str, title: str, markdown: str, api_version: str) -> Posted:
+    """Creates a private page at the top of the user's workspace, written from
+    markdown (Notion turns it into blocks)."""
+    response = await client.post(
+        NOTION_PAGES,
+        headers={"Authorization": f"Bearer {token}", "Notion-Version": api_version, "Content-Type": "application/json"},
+        json={
+            "parent": {"workspace": True},
+            "properties": {"title": {"title": [{"type": "text", "text": {"content": title[:2000]}}]}},
+            "markdown": markdown,
+        },
+    )
+    if response.status_code >= 400:
+        raise _api_error("Notion", response, "save the page")
+    data = response.json()
+    page_id = str(data.get("id") or "").replace("-", "")
+    return Posted(url=str(data.get("url") or f"https://www.notion.so/{page_id}"))
+
+
+async def post_medium(
+    client: httpx.AsyncClient, token: str, author_id: str, title: str, markdown: str, tags: list[str]
+) -> Posted:
+    """Saves a draft story (the user publishes it from Medium)."""
+    response = await client.post(
+        f"{MEDIUM_API}/users/{author_id}/posts",
+        headers={"Authorization": f"Bearer {token}", "Accept": "application/json", "Content-Type": "application/json"},
+        json={
+            "title": title[:100],
+            "contentFormat": "markdown",
+            "content": markdown,
+            "tags": [t for t in tags if len(t) <= MEDIUM_TAG_LENGTH][:MEDIUM_TAGS],
+            "publishStatus": "draft",
+        },
+    )
+    if response.status_code >= 400:
+        raise _api_error("Medium", response, "save the draft")
+    data = response.json().get("data") or {}
+    return Posted(url=str(data.get("url") or "https://medium.com/me/stories/drafts"))

@@ -21,7 +21,7 @@ class ContentRunRequest(BaseModel):
 class PublishRequest(BaseModel):
     piece_id: str = Field(min_length=1, max_length=40)
     variant_id: str = Field(min_length=1, max_length=40)
-    provider: str = Field(pattern="^(linkedin|x)$")
+    provider: str = Field(pattern="^(linkedin|x|notion|medium)$")
     # The user's edits, if they changed the draft before posting.
     text: str | None = Field(default=None, max_length=10_000)
     parts: list[str] | None = Field(default=None, max_length=25)

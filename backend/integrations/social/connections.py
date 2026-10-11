@@ -1,5 +1,6 @@
-"""Each user's LinkedIn / X connection (`social_connections`, backend only),
-with tokens encrypted at rest and refreshed when they expire (X)."""
+"""Each user's LinkedIn / X / Notion / Medium connection
+(`social_connections`, backend only), with tokens encrypted at rest and
+refreshed when they expire (X) or are rejected (Notion)."""
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -93,7 +94,24 @@ async def credentials(user_id: str, provider: str) -> tuple[str, dict[str, Any]]
     fresh = not expires or datetime.fromisoformat(expires) - timedelta(seconds=60) > datetime.now(timezone.utc)
     if fresh:
         return _decrypt(row["access_token_encrypted"], provider), row
+    return await _refresh(user_id, provider, row)
+
+
+async def force_refresh(user_id: str, provider: str) -> str:
+    """A new access token after the network rejected the current one (Notion
+    tokens carry no expiry, so this is the only time to refresh them)."""
+    row = await supabase_rest.select_one(TABLE, {"user_id": f"eq.{user_id}", "provider": f"eq.{provider}", "select": "*"})
+    if not row:
+        raise SocialError(f"Connect {NAMES[provider]} on the Connect page first", 409)
+    token, _ = await _refresh(user_id, provider, row)
+    return token
+
+
+async def _refresh(user_id: str, provider: str, row: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     if not row.get("refresh_token_encrypted"):
+        if provider == "notion":
+            await delete_connection(user_id, provider)
+            raise SocialError("Notion access ended; connect it again on the Connect page", 409)
         raise SocialError(f"Your {NAMES[provider]} connection expired; connect it again on the Connect page", 409)
     async with httpx.AsyncClient(timeout=15.0) as client:
         try:
@@ -109,7 +127,7 @@ async def credentials(user_id: str, provider: str) -> tuple[str, dict[str, Any]]
         "expires_at": _expiry(grant),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
-    if grant.refresh_token:  # X rotates refresh tokens
+    if grant.refresh_token:  # X and Notion rotate refresh tokens
         patch["refresh_token_encrypted"] = f.encrypt(grant.refresh_token.encode()).decode()
     await supabase_rest.update(TABLE, {"user_id": f"eq.{user_id}", "provider": f"eq.{provider}"}, patch)
     return grant.access_token, {**row, **patch}
