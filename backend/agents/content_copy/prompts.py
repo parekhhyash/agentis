@@ -25,7 +25,8 @@ for if they said.
 "about 500 words" is min 425 and max 575; "under 100 words" or "at most 100" is max 100; "at least 800" \
 is min 800; "300 to 400 words" is min 300 and max 400; character limits go in max_characters. \
 must_include: exact words they said must appear (keywords, a product or brand name, a link, a hashtag). \
-sections: section names they listed. notes: any other instruction (language, reading level, point of \
+sections: named sections the piece must contain (like "Pricing" or "FAQ"), not general structure \
+such as a headline, subheadings or a call to action, which go in notes. notes: any other instruction (language, reading level, point of \
 view, format such as bullet points or a table).
 - Use the conversation for follow-ups ("make it shorter", "now one for X"): the brief should reflect the \
 latest request with earlier details carried over.

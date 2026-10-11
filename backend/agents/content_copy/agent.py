@@ -50,6 +50,13 @@ def _count(value: Any, ceiling: int) -> int | None:
     return min(number, ceiling) if number > 0 else None
 
 
+# "Include a headline and subheadings" is about structure, not a named section.
+GENERIC_SECTIONS = {
+    "headline", "headlines", "title", "heading", "headings", "subheading", "subheadings", "sub-headings",
+    "subtitle", "sections", "body", "paragraphs",
+}
+
+
 def requirements(raw: Any) -> Requirements:
     """The brief's requirements, cleaned up: sane numbers, short lists."""
     raw = raw if isinstance(raw, dict) else {}
@@ -58,7 +65,7 @@ def requirements(raw: Any) -> Requirements:
         max_words=_count(raw.get("max_words"), MAX_WORDS),
         max_characters=_count(raw.get("max_characters"), 50_000),
         must_include=[s[:120] for s in _strings(raw.get("must_include"), 10)],
-        sections=[s[:80] for s in _strings(raw.get("sections"), 12)],
+        sections=[s[:80] for s in _strings(raw.get("sections"), 12) if s.lower().strip(" .") not in GENERIC_SECTIONS],
         notes=" ".join(str(raw.get("notes") or "").split())[:500],
     )
     if req.min_words and req.max_words and req.min_words > req.max_words:

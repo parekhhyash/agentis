@@ -35,8 +35,13 @@ def allowed_figures(*sources: str) -> set[str]:
     return found
 
 
+# Phrases with numbers in them that aren't claims ("24/7 support").
+_NOT_FIGURES = re.compile(r"\b24\s?[/x×]\s?7\b|\b365\s?days\b", re.I)
+
+
 def _unsupported(text: str, allowed: set[str]) -> list[str]:
     out = []
+    text = _NOT_FIGURES.sub(" ", text)
     for match in _FIGURE.finditer(text):
         raw = match.group(0).strip()
         key = re.sub(r"[\s,$₹€£]", "", raw).lower()

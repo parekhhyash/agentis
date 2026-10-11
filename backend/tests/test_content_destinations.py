@@ -34,6 +34,8 @@ def test_requirements_are_cleaned_up():
     assert req.must_include == ["free delivery", "3"] and req.notes == "write in Hindi"
     assert requirements(None) == Requirements() and not requirements("junk").any()
     assert requirements({"max_words": 99999}).max_words == 6000
+    # Asking for "a headline and subheadings" is structure, not a named section.
+    assert requirements({"sections": ["Headline", "Subheadings", "Pricing"]}).sections == ["Pricing"]
 
 
 def _issues(fmt_id: str, req: Requirements, **fields) -> list[str]:
@@ -53,6 +55,12 @@ def test_length_phrases_and_sections_are_checked():
     ]
     # Phrases match across markdown and case.
     assert not _issues("general", Requirements(must_include=["free delivery"]), text="Now with **Free Delivery** on all orders.")
+
+
+def test_24_7_is_not_a_made_up_figure():
+    issues = _issues("general", Requirements(), text="Support that answers 24/7, and 24x7 uptime. Converts 20% better.")
+    figures = [i for i in issues if "figures" in i]
+    assert figures == ["warning: Check these figures, they weren't in your brief: 20%"]
 
 
 def test_medium_titles_subtitles_and_tags_have_their_own_limits():
