@@ -4,8 +4,8 @@ import { CONNECTORS } from '../lib/connectors'
 
 // Every app Agentis connects to, circling the Agentis mark on two tilted
 // elliptical orbits (in opposite directions). The inner one is a planet's
-// ring: flatter than the mark, so it crosses it, its front half drawn over
-// the mark and its back half behind. Logos in front grow and pass over the
+// ring: wider than the mark but not as tall, so it crosses it, its front
+// half drawn over the mark and its back half behind. Logos in front grow and pass over the
 // mark; those behind shrink, fade and pass under it. Drawn without tiles,
 // like the Connect page.
 
@@ -20,8 +20,10 @@ const LOGOS: Orbiter[] = CONNECTORS.flatMap((c) =>
     wide: c.id === 'zoho' || c.id === 'salesforce',
   })),
 )
-const OUTER = LOGOS.filter((_, i) => i % 5 !== 2)
-const INNER = LOGOS.filter((_, i) => i % 5 === 2)
+// Google Sheets, X and Slack go round the mark; the rest on the outer orbit.
+const INNER_NAMES = new Set(['Google Sheets', 'X', 'Slack'])
+const OUTER = LOGOS.filter((l) => !INNER_NAMES.has(l.name))
+const INNER = LOGOS.filter((l) => INNER_NAMES.has(l.name))
 
 const TILT = (-14 * Math.PI) / 180
 // Seconds per lap.
@@ -29,15 +31,17 @@ const OUTER_LAP = 48
 const INNER_LAP = 36
 
 // The two orbits for a stage this wide around a mark of this radius: outer
-// clockwise; inner the other way, wider than the mark but not as tall, so it
-// passes in front of and behind it.
+// clockwise, inner the other way. Both are the same shape (one height to
+// width ratio, one centre, one tilt), so they sit symmetrically; the inner one
+// is wider than the mark but not as tall, so it passes in front of and behind it.
 function ringsFor(width: number, planet: number) {
+  // Rounder on phones, where flat ellipses would crowd the mark.
+  const ratio = width < 640 ? 0.4 : 0.3
   const rx = Math.min(width * 0.45, 400)
-  // Rounder on phones, where a flat ellipse would crowd the mark.
-  const ry = rx * (width < 640 ? 0.62 : 0.34)
+  const inner = Math.min(planet * 2.2, rx * 0.66)
   return [
-    { logos: OUTER, rx, ry, lap: OUTER_LAP, direction: 1 },
-    { logos: INNER, rx: Math.min(planet * 2.6, rx * 0.8), ry: planet * 0.5, lap: INNER_LAP, direction: -1 },
+    { logos: OUTER, rx, ry: rx * ratio, lap: OUTER_LAP, direction: 1 },
+    { logos: INNER, rx: inner, ry: inner * ratio, lap: INNER_LAP, direction: -1 },
   ]
 }
 
@@ -53,9 +57,8 @@ function halfEllipse(cx: number, cy: number, rx: number, ry: number, near: boole
   return `M ${from} A ${rx} ${ry} ${(TILT * 180) / Math.PI} 0 1 ${to}`
 }
 
+// One light dotted line for every orbit, front and back.
 const PATH = { fill: 'none', strokeWidth: 1.5, strokeDasharray: '2 8', strokeLinecap: 'round' as const, className: 'stroke-slate-300' }
-// The ring's near half reads as in front: a little stronger than the rest.
-const NEAR_PATH = { ...PATH, strokeWidth: 1.75, strokeDasharray: '2 6', className: 'stroke-slate-400' }
 
 function reducedMotion(): boolean {
   return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -167,7 +170,7 @@ export default function ConnectorOrbit() {
 
           {/* In front of the mark: the inner ring's near half. */}
           <svg className="pointer-events-none absolute inset-0 z-[25] h-full w-full overflow-visible">
-            {size.w > 0 && <path d={halfEllipse(cx, cy, inner.rx, inner.ry, true)} {...NEAR_PATH} />}
+            {size.w > 0 && <path d={halfEllipse(cx, cy, inner.rx, inner.ry, true)} {...PATH} />}
           </svg>
 
           {size.w > 0 &&
