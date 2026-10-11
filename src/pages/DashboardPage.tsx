@@ -488,6 +488,7 @@ export default function DashboardPage() {
           ) : view === 'scheduled' ? (
             <ScheduledPanel
               scheduled={scheduled}
+              gmail={google.status?.connected ? google.status.email : null}
               onOpenChat={(id) => void openChat(id)}
               onAsk={(prompt) => {
                 setSelectedId(null)

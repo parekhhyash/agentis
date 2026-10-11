@@ -23,10 +23,13 @@ function TaskCard({
   task,
   scheduled,
   onOpenChat,
+  gmail,
 }: {
   task: ScheduledTask
   scheduled: ScheduledTasks
   onOpenChat: (conversationId: string) => void
+  // The connected Gmail address the summary goes from and to; null if none.
+  gmail: string | null
 }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -137,6 +140,11 @@ function TaskCard({
             className="h-4 w-4 rounded border-slate-300 accent-brand-blue"
           />
           Email me the results
+          {task.notify_email && (
+            <span className={`text-xs ${gmail ? 'text-slate-400' : 'text-amber-700'}`}>
+              {gmail ? `to ${gmail}, from your Gmail` : 'connect Gmail on the Connect page to get them'}
+            </span>
+          )}
         </label>
 
         {confirmDelete ? (
@@ -204,14 +212,35 @@ function TaskCard({
   )
 }
 
+function Examples({ onAsk }: { onAsk: (prompt: string) => void }) {
+  return (
+    <ul className="mt-4 space-y-2">
+      {EXAMPLES.map((example) => (
+        <li key={example}>
+          <button
+            type="button"
+            onClick={() => onAsk(example)}
+            className="w-full rounded-xl border border-slate-200 bg-surface px-4 py-3 text-left text-sm text-slate-700 transition-colors hover:border-brand-blue/40 hover:bg-sky-50"
+          >
+            {example}
+          </button>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 export default function ScheduledPanel({
   scheduled,
   onOpenChat,
   onAsk,
+  gmail,
 }: {
   scheduled: ScheduledTasks
   onOpenChat: (conversationId: string) => void
   onAsk: (prompt: string) => void
+  // The connected Gmail address that "Email me the results" uses; null if none.
+  gmail: string | null
 }) {
   const { tasks, error } = scheduled
 
@@ -233,26 +262,21 @@ export default function ScheduledPanel({
           <p className="mt-1 text-sm text-slate-500">
             Tell the Operations agent what to do and when, in your own words. For example:
           </p>
-          <ul className="mt-4 space-y-2">
-            {EXAMPLES.map((example) => (
-              <li key={example}>
-                <button
-                  type="button"
-                  onClick={() => onAsk(example)}
-                  className="w-full rounded-xl border border-slate-200 bg-surface px-4 py-3 text-left text-sm text-slate-700 transition-colors hover:border-brand-blue/40 hover:bg-sky-50"
-                >
-                  {example}
-                </button>
-              </li>
-            ))}
-          </ul>
+          <Examples onAsk={onAsk} />
         </div>
       ) : (
-        <ul className="mt-8 space-y-4">
-          {tasks.map((task) => (
-            <TaskCard key={task.id} task={task} scheduled={scheduled} onOpenChat={onOpenChat} />
-          ))}
-        </ul>
+        <>
+          <ul className="mt-8 space-y-4">
+            {tasks.map((task) => (
+              <TaskCard key={task.id} task={task} scheduled={scheduled} onOpenChat={onOpenChat} gmail={gmail} />
+            ))}
+          </ul>
+          <div className="mt-10">
+            <p className="font-semibold text-slate-900">Schedule something else</p>
+            <p className="mt-1 text-sm text-slate-500">Pick one to start from, or ask the Operations agent in your own words.</p>
+            <Examples onAsk={onAsk} />
+          </div>
+        </>
       )}
     </div>
   )
