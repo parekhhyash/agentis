@@ -22,6 +22,7 @@ MAX_EXPORT_COLUMNS = 50
 MAX_CELL = 5000
 
 _ID = re.compile(r"^[A-Za-z0-9_-]{25,100}$")
+_API_OFF = re.compile(r"has not been used in project|is disabled|SERVICE_DISABLED|accessNotConfigured", re.I)
 
 
 class SheetLinkError(GoogleIntegrationError):
@@ -82,6 +83,13 @@ class SheetsClient:
         self._account = account
 
     def _explain(self, exc: GoogleAPIError) -> GoogleIntegrationError:
+        # The API switched off in the operator's Google Cloud project: no
+        # sheet would open, so say what's wrong instead of blaming the link.
+        if exc.status == 403 and _API_OFF.search(str(exc)):
+            return GoogleIntegrationError(
+                "Google Sheets isn't switched on for Agentis yet: enable the Google Sheets API in the Agentis "
+                "Google Cloud project (APIs & Services > Library), wait a few minutes, then try again."
+            )
         if exc.status in (403, 404):
             where = f" ({self._account})" if self._account else ""
             return GoogleIntegrationError(
@@ -126,5 +134,10 @@ class SheetsClient:
                 }],
             }],
         }
-        data = await self._api.request("POST", "/spreadsheets", json=body)
+        try:
+            data = await self._api.request("POST", "/spreadsheets", json=body)
+        except GoogleAPIError as exc:
+            if exc.status == 403 and _API_OFF.search(str(exc)):
+                raise self._explain(exc) from exc
+            raise
         return str(data.get("spreadsheetUrl") or f"https://docs.google.com/spreadsheets/d/{data.get('spreadsheetId')}/edit")

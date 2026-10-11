@@ -623,7 +623,7 @@ Run the Google connections migration:
    ```
 4. Set the relevant environment variables in `backend/.env`
 
-**Google Sheets** uses the same OAuth client. In the same Google Cloud project, enable the **Google Sheets API** and add the scopes `spreadsheets.readonly` and `drive.file` to the consent screen. Both are free. People connect Sheets on its own card; it adds the two scopes to their Google sign-in (same account as Gmail, or Sheets alone). `drive.file` only reaches spreadsheets Agentis creates, and `spreadsheets.readonly` reads the sheets people link. Run `supabase/migrations/20261014010000_google_sheets_datasets.sql`.
+**Google Sheets** uses the same OAuth client. In the same Google Cloud project, enable the **Google Sheets API** and add the scopes `spreadsheets.readonly` and `drive.file` to the consent screen. Both are free. People connect Sheets on its own card; it adds the two scopes to their Google sign-in (same account as Gmail, or Sheets alone). `drive.file` only reaches spreadsheets Agentis creates, and `spreadsheets.readonly` reads the sheets people link. Run `supabase/migrations/20261014010000_google_sheets_datasets.sql`. The Sheets API isn't on by default: until it's enabled, Google refuses every call and Agentis says so. Google's own Sheets MCP server (`sheetsmcp.googleapis.com`) isn't used: it's a Developer Preview whose terms don't allow public apps, and the plain Sheets API covers what Agentis needs.
 
 ### 6. CRM Setup (Optional — HubSpot, Salesforce, Zoho CRM)
 

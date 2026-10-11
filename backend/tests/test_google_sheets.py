@@ -303,3 +303,24 @@ def test_linking_needs_sheets_connected(sheet_store, monkeypatch):
     with pytest.raises(OutreachError) as err:
         asyncio.run(data_runner.add_sheet(USER, SHEET_ID))
     assert err.value.status == 409 and "Google Sheets" in str(err.value)
+
+
+def test_a_switched_off_sheets_api_is_explained_not_blamed_on_the_link():
+    off = {"error": {"code": 403, "message": "Google Sheets API has not been used in project 123 before or it is disabled.",
+                     "status": "PERMISSION_DENIED"}}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(403, json=off)
+
+    async def go():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            api = SheetsClient("tok", client, "me@agentis.app")
+            with pytest.raises(GoogleIntegrationError) as read:
+                await api.tabs(SheetRef(SHEET_ID))
+            with pytest.raises(GoogleIntegrationError) as create:
+                await api.create("Leads", "Leads", ["A"], [["x"]])
+            return str(read.value), str(create.value)
+
+    read, create = asyncio.run(go())
+    assert "enable the Google Sheets API" in read and "can't open that sheet" not in read
+    assert "enable the Google Sheets API" in create
