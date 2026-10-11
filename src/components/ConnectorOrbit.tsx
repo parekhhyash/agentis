@@ -3,9 +3,11 @@ import { useEffect, useRef, useState } from 'react'
 import { CONNECTORS } from '../lib/connectors'
 
 // Every app Agentis connects to, circling the Agentis mark on two tilted
-// elliptical orbits (in opposite directions). Logos in front of the mark
-// grow and pass over it; those behind shrink, fade and pass under it, so the
-// rings read as a ring around a planet. Drawn without tiles, like the Connect page.
+// elliptical orbits (in opposite directions). The inner one is a planet's
+// ring: flatter than the mark, so it crosses it, its front half drawn over
+// the mark and its back half behind. Logos in front grow and pass over the
+// mark; those behind shrink, fade and pass under it. Drawn without tiles,
+// like the Connect page.
 
 type Orbiter = { src: string; name: string; mono: boolean; wide: boolean }
 
@@ -26,16 +28,34 @@ const TILT = (-14 * Math.PI) / 180
 const OUTER_LAP = 48
 const INNER_LAP = 36
 
-// The two orbits for a stage this wide: outer clockwise, inner the other way.
-function ringsFor(width: number) {
+// The two orbits for a stage this wide around a mark of this radius: outer
+// clockwise; inner the other way, wider than the mark but not as tall, so it
+// passes in front of and behind it.
+function ringsFor(width: number, planet: number) {
   const rx = Math.min(width * 0.45, 400)
   // Rounder on phones, where a flat ellipse would crowd the mark.
   const ry = rx * (width < 640 ? 0.62 : 0.34)
   return [
     { logos: OUTER, rx, ry, lap: OUTER_LAP, direction: 1 },
-    { logos: INNER, rx: rx * 0.6, ry: ry * 0.6, lap: INNER_LAP, direction: -1 },
+    { logos: INNER, rx: Math.min(planet * 2.6, rx * 0.8), ry: planet * 0.5, lap: INNER_LAP, direction: -1 },
   ]
 }
+
+// Half of a tilted ellipse as an SVG path: the near half (through the
+// bottom) or the far half (through the top).
+function halfEllipse(cx: number, cy: number, rx: number, ry: number, near: boolean): string {
+  const at = (t: number) => {
+    const x = Math.cos(t) * rx
+    const y = Math.sin(t) * ry
+    return `${cx + x * Math.cos(TILT) - y * Math.sin(TILT)} ${cy + x * Math.sin(TILT) + y * Math.cos(TILT)}`
+  }
+  const [from, to] = near ? [at(0), at(Math.PI)] : [at(Math.PI), at(Math.PI * 2)]
+  return `M ${from} A ${rx} ${ry} ${(TILT * 180) / Math.PI} 0 1 ${to}`
+}
+
+const PATH = { fill: 'none', strokeWidth: 1.5, strokeDasharray: '2 8', strokeLinecap: 'round' as const, className: 'stroke-slate-300' }
+// The ring's near half reads as in front: a little stronger than the rest.
+const NEAR_PATH = { ...PATH, strokeWidth: 1.75, strokeDasharray: '2 6', className: 'stroke-slate-400' }
 
 function reducedMotion(): boolean {
   return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -43,22 +63,29 @@ function reducedMotion(): boolean {
 
 export default function ConnectorOrbit() {
   const stageRef = useRef<HTMLDivElement>(null)
+  const planetRef = useRef<HTMLSpanElement>(null)
   const itemsRef = useRef<(HTMLSpanElement | null)[]>([])
-  const [size, setSize] = useState({ w: 0, h: 0 })
+  // Stage width and height, and the mark's radius (it changes at the sm breakpoint).
+  const [size, setSize] = useState({ w: 0, h: 0, r: 0 })
 
   useEffect(() => {
     const el = stageRef.current
     if (!el) return
-    const observer = new ResizeObserver(([entry]) => setSize({ w: entry.contentRect.width, h: entry.contentRect.height }))
+    const observer = new ResizeObserver(([entry]) =>
+      setSize({ w: entry.contentRect.width, h: entry.contentRect.height, r: (planetRef.current?.offsetWidth ?? 128) / 2 }),
+    )
     observer.observe(el)
     return () => observer.disconnect()
   }, [])
 
-  const rings = ringsFor(size.w)
+  const rings = ringsFor(size.w, size.r)
+  const [outer, inner] = rings
+  const cx = size.w / 2
+  const cy = size.h / 2
 
   useEffect(() => {
     if (!size.w) return
-    const rings = ringsFor(size.w)
+    const rings = ringsFor(size.w, size.r)
     const place = (seconds: number) => {
       let n = 0
       for (const ring of rings) {
@@ -101,7 +128,7 @@ export default function ConnectorOrbit() {
       cancelAnimationFrame(frame)
       observer.disconnect()
     }
-  }, [size.w])
+  }, [size.w, size.r])
 
   let n = 0
   return (
@@ -120,29 +147,28 @@ export default function ConnectorOrbit() {
         </div>
 
         <div ref={stageRef} aria-hidden="true" className="relative mx-auto h-[20rem] w-full max-w-5xl sm:h-[28rem] lg:h-[30rem]">
-          <svg className="absolute inset-0 h-full w-full overflow-visible">
-            {size.w > 0 &&
-              rings.map((ring, i) => (
-                <ellipse
-                  key={i}
-                  cx={size.w / 2}
-                  cy={size.h / 2}
-                  rx={ring.rx}
-                  ry={ring.ry}
-                  transform={`rotate(${(TILT * 180) / Math.PI} ${size.w / 2} ${size.h / 2})`}
-                  fill="none"
-                  strokeWidth="1.5"
-                  strokeDasharray="2 8"
-                  strokeLinecap="round"
-                  className="stroke-slate-300"
-                />
-              ))}
+          {/* Behind the mark: the outer orbit and the inner ring's far half. */}
+          <svg className="absolute inset-0 z-0 h-full w-full overflow-visible">
+            {size.w > 0 && (
+              <>
+                <ellipse cx={cx} cy={cy} rx={outer.rx} ry={outer.ry} transform={`rotate(${(TILT * 180) / Math.PI} ${cx} ${cy})`} {...PATH} />
+                <path d={halfEllipse(cx, cy, inner.rx, inner.ry, false)} {...PATH} />
+              </>
+            )}
           </svg>
 
-          {/* Agentis, between the two halves of the rings. */}
-          <span className="absolute top-1/2 left-1/2 z-20 flex h-24 w-24 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-surface shadow-lg ring-1 ring-slate-200 sm:h-32 sm:w-32">
+          {/* Agentis, the planet the inner ring goes round. */}
+          <span
+            ref={planetRef}
+            className="absolute top-1/2 left-1/2 z-20 flex h-24 w-24 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-surface shadow-lg ring-1 ring-slate-200 sm:h-32 sm:w-32"
+          >
             <span className="font-display text-xl leading-none text-slate-900 sm:text-3xl">Agentis</span>
           </span>
+
+          {/* In front of the mark: the inner ring's near half. */}
+          <svg className="pointer-events-none absolute inset-0 z-[25] h-full w-full overflow-visible">
+            {size.w > 0 && <path d={halfEllipse(cx, cy, inner.rx, inner.ry, true)} {...NEAR_PATH} />}
+          </svg>
 
           {size.w > 0 &&
             rings.flatMap((ring) =>
