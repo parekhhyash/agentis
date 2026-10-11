@@ -137,13 +137,9 @@ export default function ConnectorOrbit() {
               ))}
           </svg>
 
-          {/* The Agentis mark, between the two halves of the rings. */}
-          <span className="absolute top-1/2 left-1/2 z-20 flex h-20 w-20 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-surface shadow-lg ring-1 ring-slate-200 sm:h-28 sm:w-28">
-            <span className="absolute -inset-3 rounded-full bg-brand-blue/10 sm:-inset-4" />
-            <span className="absolute -inset-6 rounded-full bg-brand-blue/5 sm:-inset-9" />
-            <span className="absolute inset-0 animate-ping rounded-full bg-brand-blue/15 [animation-duration:2.4s] motion-reduce:animate-none" />
-            <span className="absolute inset-0 rounded-full bg-surface ring-1 ring-slate-200" />
-            <span className="font-display relative text-4xl leading-none text-slate-900 sm:text-6xl">A</span>
+          {/* Agentis, between the two halves of the rings. */}
+          <span className="absolute top-1/2 left-1/2 z-20 flex h-24 w-24 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-surface shadow-lg ring-1 ring-slate-200 sm:h-32 sm:w-32">
+            <span className="font-display text-xl leading-none text-slate-900 sm:text-3xl">Agentis</span>
           </span>
 
           {size.w > 0 &&
