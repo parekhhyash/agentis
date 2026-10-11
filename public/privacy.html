@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Privacy policy · Agentis</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400..700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/legal.css" />
+    <script>
+      try {
+        var t = localStorage.getItem('agentis-theme')
+        if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches))
+          document.documentElement.classList.add('dark')
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <main>
+      <a class="brand" href="/">Agentis</a>
+      <h1>Privacy policy</h1>
+      <p class="updated">Last updated 11 October 2026</p>
+
+      <p>
+        Agentis is a college project: a workspace where AI agents help a company find leads, write and send
+        outreach, write content, build reports and run tasks on a schedule. This page explains what Agentis
+        stores, why, and what you can do about it.
+      </p>
+
+      <h2>What Agentis stores</h2>
+      <ul>
+        <li>Your account: name and email address, used to sign you in.</li>
+        <li>Your company profile: the details you enter during setup, which the agents use as context.</li>
+        <li>Your chats: the messages you send, the agents' results, and drafts you edit or approve.</li>
+        <li>Files you upload for reports, and the scheduled tasks you create.</li>
+        <li>
+          Connections you make to other apps (Google, HubSpot, Salesforce, Zoho CRM, LinkedIn, X, Notion,
+          Medium): the access tokens those apps give Agentis, encrypted at rest, and the name of the connected
+          account.
+        </li>
+      </ul>
+
+      <h2>How it is used</h2>
+      <ul>
+        <li>Only to do what you ask Agentis to do.</li>
+        <li>
+          Agents act in a connected app only after you confirm: sending an email, booking a meeting, posting to
+          LinkedIn, saving a page to Notion or a draft to Medium, or changing a CRM record. Scheduled tasks only
+          prepare results and drafts; they don't send or post anything on their own.
+        </li>
+        <li>Agentis doesn't sell your data, show ads, or use your data to train AI models.</li>
+      </ul>
+
+      <h2>Services that process your data</h2>
+      <ul>
+        <li>Supabase: database and sign-in.</li>
+        <li>Render: runs the Agentis backend.</li>
+        <li>Vercel: hosts this website.</li>
+        <li>
+          An AI model provider: your messages, and the data an agent needs for a task, are sent to the model to
+          write the answer.
+        </li>
+        <li>Exa: web search for lead research.</li>
+        <li>The apps you connect, when an agent works in them for you.</li>
+      </ul>
+
+      <h2>Data from Google</h2>
+      <p>
+        Agentis's use of information received from Google APIs adheres to the
+        <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>,
+        including the Limited Use requirements. Gmail and Calendar data is used only to provide the features you
+        use (drafting replies, checking for replies, booking meetings, reports on your outreach), is not used for
+        ads, and is not shared with anyone except the services above as needed to provide those features.
+      </p>
+
+      <h2>Your choices</h2>
+      <ul>
+        <li>Disconnect any app on the Connect page; Agentis deletes its tokens.</li>
+        <li>You can also remove Agentis's access from the app itself (for example in your Google or LinkedIn settings).</li>
+        <li>To delete your account and everything stored with it, ask the Agentis project team.</li>
+      </ul>
+
+      <h2>Changes</h2>
+      <p>If this policy changes, the date at the top changes with it.</p>
+
+      <p class="links"><a href="/terms.html">Terms of use</a> · <a href="/">Back to Agentis</a></p>
+    </main>
+  </body>
+</html>

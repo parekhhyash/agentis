@@ -62,7 +62,7 @@ export const CONNECTORS: ConnectorInfo[] = [
   {
     id: 'x',
     name: 'X (Twitter)',
-    description: 'Post drafted posts and threads to your X account after you confirm. Uses your X API credits.',
+    description: 'Drafted posts and threads open in X, ready to publish from your own account with one click. Free, nothing to connect.',
     usedBy: 'Content & Copy',
     tile: 'bg-ink text-white',
     monogram: 'X',

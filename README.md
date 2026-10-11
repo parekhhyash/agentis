@@ -42,7 +42,7 @@ The system is built as a **React + TypeScript** frontend (Vite) paired with a **
 - **Data & Reporting Agent** — Answers questions about numbers with headline figures, charts and tables, from the user's Agentis activity (leads, emails, replies, meetings) and CSV/Excel files they upload. The model plans queries; the backend runs every calculation, and the written summary may only quote numbers that the queries produced
 - **Content & Copy Agent** — Writes LinkedIn posts, X posts and threads, Instagram captions, blog posts, Medium stories, emails and ad copy, plus any other writing to the user's own requirements (press releases, web pages, product descriptions, scripts), several options per piece. The backend checks every option against the platform's real limits (X counts links as 23 and emoji as 2) and against what the user asked for (word or character limits, phrases to include, sections), flags clichés and figures that aren't in the request, fixes rule-breaking drafts once, then scores and recommends one
 - **Notion and Medium** — Save any draft as a private page in the user's Notion workspace, or a story as a Medium draft (Medium only issues API tokens to accounts that made one before 2025; everyone else gets "Copy for Medium", which pastes with headings and emphasis intact)
-- **LinkedIn and X posting** — Connect a LinkedIn profile or X account and post a chosen option (edited or not) straight from the chat, after a confirm step; X threads go out as a reply chain
+- **LinkedIn and X posting** — Connect a LinkedIn profile and post a chosen option (edited or not) straight from the chat, after a confirm step. X uses its free post intent: "Open in X" opens X's composer with the draft filled in (direct posting through X's paid API turns on only if X keys are set)
 - **Operations Agent (scheduled tasks)** — Put any agent on a schedule in plain words (*"every Monday at 9, report last week's emails and replies and email it to me"*). Each task is 1 to 3 steps run in order into its own chat, daily, weekly, monthly or once, in the user's time zone. Every change is a card the user confirms; runs only draft, so emails, CRM changes and posts still wait for approval. A Scheduled page lists tasks with Run now, Pause, Resume and Delete, and an optional summary email arrives from the user's own Gmail
 - **Conversational Dashboard** — Chat-style UI where each agent request appears as a conversation with real-time progress updates
 - **Google Integration** — Secure OAuth 2.0 flow to connect Gmail (send, read, reply) and Google Calendar (create events with Meet links)
@@ -468,7 +468,7 @@ Request + company context + earlier turns of the chat
 
 **Requirements** — The brief records only what the user explicitly asked for: "about 500 words" becomes 425 to 575, "under 100 words" a maximum, plus character limits, phrases that must appear word for word, section names and other notes (language, reading level, bullet points). They override the format's usual length, are checked in code on every option (and again after an edit), and long pieces get fewer options and a larger writing budget. The chat shows "You asked for: …" with a live word count.
 
-**Posting** — LinkedIn and X options have a "Post to …" button once the network is connected. Posting re-runs the limit checks on the (possibly edited) text, asks for confirmation, then posts as the user: LinkedIn through the Posts API (`w_member_social`), X through `POST /2/tweets` (threads as replies to the previous post). Each option can be posted once per network; the post link is saved on the chat turn. If an X thread fails partway, the posts that went out are recorded.
+**Posting** — X options have "Open in X", which opens X's own composer with the draft filled in (free, nothing to connect). LinkedIn options (and X, if X's paid API keys are set) have a "Post to …" button once the network is connected. Posting re-runs the limit checks on the (possibly edited) text, asks for confirmation, then posts as the user: LinkedIn through the Posts API (`w_member_social`), X through `POST /2/tweets` (threads as replies to the previous post). Each option can be posted once per network; the post link is saved on the chat turn. If an X thread fails partway, the posts that went out are recorded.
 
 **Notion and Medium** — Every option has "Save to Notion": a private page at the top of the user's workspace, created from markdown (`POST /v1/pages` with `markdown`, `Notion-Version: 2026-03-11`). Articles (blog posts, Medium stories, long-form pieces) can also be saved as **Medium drafts** (`publishStatus: draft`; the user publishes from Medium). Neither is public, so they skip the confirm step and the limit gate; each option is saved once per destination and the link is kept on the chat turn.
 
@@ -621,30 +621,37 @@ Run `supabase/migrations/20261010000000_crm_connections.sql`. All CRMs return to
 
 ### 7. LinkedIn / X / Notion / Medium Setup (Optional — Content & Copy publishing)
 
-Run `supabase/migrations/20261011000000_social_connections.sql` and `20261013000000_notion_medium_connections.sql`. LinkedIn, X and Notion return to one callback: `https://<your-backend>/integrations/social/callback` (`SOCIAL_OAUTH_REDIRECT_URI`, defaults to the Google callback's host). `INTEGRATIONS_ENCRYPTION_KEY` must be set. The agent writes content without either; only the post buttons need them.
+Agentis registers **one app per network**; every company that uses Agentis then connects its own account through it (OAuth), so nobody else has to create developer apps. All of these are free:
+
+| | How it works | Cost | Setup |
+|---|---|---|---|
+| LinkedIn | Posts as the member who connected (Share on LinkedIn) | Free | One LinkedIn app, below |
+| X | "Open in X" opens X's own post composer with the draft filled in; the user presses Post | Free | None |
+| Notion | Saves a private page in the connected workspace | Free | One public Notion integration, below |
+| Medium | "Copy for Medium" (rich text), or a draft via a pre-2025 integration token | Free | None |
+
+Run `supabase/migrations/20261011000000_social_connections.sql` and `20261013000000_notion_medium_connections.sql`. LinkedIn and Notion return to one callback: `https://<your-backend>/integrations/social/callback` (`SOCIAL_OAUTH_REDIRECT_URI`, defaults to the Google callback's host). `INTEGRATIONS_ENCRYPTION_KEY` must be set. Both need a privacy policy and terms page: `https://<your-frontend>/privacy.html` and `/terms.html` (in `public/`), and `public/agentis-logo.png` works as the app logo.
 
 **LinkedIn**
-1. At [linkedin.com/developers](https://www.linkedin.com/developers/apps) create an app (it must be linked to a LinkedIn Page).
-2. Products: add **Share on LinkedIn** and **Sign In with LinkedIn using OpenID Connect** (scopes `openid profile email w_member_social`).
-3. Auth > Authorized redirect URLs: the social callback above.
-4. Set `LINKEDIN_CLIENT_ID` and `LINKEDIN_CLIENT_SECRET` on the backend. `LINKEDIN_API_VERSION` (`YYYYMM`) is sent as the `LinkedIn-Version` header; LinkedIn retires versions after about a year.
+1. LinkedIn apps belong to a LinkedIn Page: create a free Page for Agentis if there isn't one.
+2. At [linkedin.com/developers/apps](https://www.linkedin.com/developers/apps) create an app: name Agentis, that Page, privacy policy URL, the logo. Then ask the Page admin to verify the app (Settings tab).
+3. Products: add **Share on LinkedIn** and **Sign In with LinkedIn using OpenID Connect** (self-serve, no review; scopes `openid profile email w_member_social`).
+4. Auth > Authorized redirect URLs for your app: the social callback above.
+5. Set `LINKEDIN_CLIENT_ID` and `LINKEDIN_CLIENT_SECRET` on the backend. `LINKEDIN_API_VERSION` (`YYYYMM`) is sent as the `LinkedIn-Version` header; LinkedIn retires versions after about a year.
 
-LinkedIn access tokens last 60 days and this app type gets no refresh token, so users reconnect when the Connect page says access is ending.
+Any LinkedIn member can then connect. Access tokens last 60 days and this app type gets no refresh token, so users reconnect when the Connect page says access is ending.
 
-**X (Twitter)**
-1. At [developer.x.com](https://developer.x.com) create a project and app.
-2. User authentication settings: OAuth 2.0, type **Web App**, permissions **Read and write**, callback URL = the social callback.
-3. Set `X_CLIENT_ID` and `X_CLIENT_SECRET` (OAuth 2.0 client ID and secret, not the API key) on the backend.
-4. Buy API credits in the developer console. X API is pay-per-use: each post costs credits (more for posts that contain a link), and posting fails with a clear message when credits run out.
+**X** — nothing to set up. X's API is pay-per-use for new developers (since February 2026), so Agentis uses X's free [post intent](https://docs.x.com/x-for-websites/post-button/guides/web-intent) instead: "Open in X" opens `x.com/intent/tweet` with the draft filled in (for a thread, the first post, with the whole thread copied for the rest). Direct API posting is still in the code and turns on only if you set `X_CLIENT_ID` / `X_CLIENT_SECRET` from an X app with OAuth 2.0 (Web App, read and write, the social callback) and prepaid credits.
 
 **Notion**
-1. At [notion.so/profile/integrations](https://www.notion.so/profile/integrations) create a **public** integration (public integrations sign users in with OAuth; internal ones can't create workspace-level pages).
-2. Capabilities: **Insert content** (read content is optional). Redirect URI: the social callback above.
-3. Set `NOTION_CLIENT_ID` and `NOTION_CLIENT_SECRET` (the OAuth client ID and secret) on the backend. `NOTION_API_VERSION` defaults to `2026-03-11`, the version that accepts markdown page content.
+1. At [notion.so/profile/integrations](https://www.notion.so/profile/integrations) create a new integration of type **Public**, with installation scope **Any workspace** (this is chosen once and can't be changed; "Selected workspaces only" would block other companies).
+2. Fill in the company name (Agentis), website, privacy policy and terms URLs above, a support email and the logo.
+3. Capabilities: **Insert content** (read content is optional). OAuth redirect URI: the social callback above.
+4. Set `NOTION_CLIENT_ID` and `NOTION_CLIENT_SECRET` (the OAuth client ID and secret) on the backend. `NOTION_API_VERSION` defaults to `2026-03-11`, the version that accepts markdown page content.
 
-Pages are created private at the top of the user's workspace. Notion's tokens carry no expiry; if Notion rejects one, the backend refreshes it once with the stored refresh token, and otherwise asks the user to reconnect.
+No Notion review is needed (that's only for a Marketplace listing). Pages are created private at the top of the user's workspace. Notion's tokens carry no expiry; if Notion rejects one, the backend refreshes it once with the stored refresh token, and otherwise asks the user to reconnect.
 
-**Medium** — no server setup. Medium stopped issuing integration tokens on 1 January 2025; users who made one before then paste it on the Connect page (Medium > Settings > Security and apps > Integration tokens) and it's checked with `GET /v1/me`. Everyone else uses **Copy for Medium** on a story, which copies it as rich text for Medium's editor.
+**Medium** — nothing to set up. Medium stopped issuing integration tokens on 1 January 2025; users who made one before then paste it on the Connect page (Medium > Settings > Security and apps > Integration tokens) and stories save as drafts. Everyone else uses **Copy for Medium**, which copies a story as rich text for Medium's editor.
 
 ### 8. Scheduled Tasks Setup (Operations)
 
@@ -693,7 +700,7 @@ The secret never leaves the database: pg_cron sends it as `X-Operations-Secret`,
 | `FRONTEND_URL` | For outreach | Where OAuth callback redirects (default: `http://localhost:5173`) |
 | `LINKEDIN_CLIENT_ID` / `LINKEDIN_CLIENT_SECRET` | For LinkedIn posting | LinkedIn app credentials |
 | `LINKEDIN_API_VERSION` | ❌ | `LinkedIn-Version` header, `YYYYMM` (default: `202609`) |
-| `X_CLIENT_ID` / `X_CLIENT_SECRET` | For X posting | X app OAuth 2.0 client credentials |
+| `X_CLIENT_ID` / `X_CLIENT_SECRET` | ❌ | Only for direct posting through X's paid API; without them "Open in X" is used (free) |
 | `SOCIAL_OAUTH_REDIRECT_URI` | ❌ | LinkedIn/X callback (default: derived from `GOOGLE_OAUTH_REDIRECT_URI`) |
 | `NOTION_CLIENT_ID` / `NOTION_CLIENT_SECRET` | For Save to Notion | Notion public integration OAuth credentials |
 | `NOTION_API_VERSION` | ❌ | `Notion-Version` header (default: `2026-03-11`) |

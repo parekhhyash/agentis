@@ -138,6 +138,8 @@ Notion and Medium (`integrations/social/`): Notion is a public integration
 (OAuth, HTTP Basic client auth); "Save to Notion" creates a private
 workspace-level page from markdown (`agents/content_copy/export.py`) with
 `Notion-Version: 2026-03-11`, refreshing the token once if Notion rejects it.
+X: without `X_CLIENT_ID` (its API is paid for new developers), the frontend
+uses X's free post intent instead and the backend isn't involved.
 Medium has no OAuth for new apps: `POST /integrations/social/medium/token`
 checks a pasted pre-2025 integration token, and articles save as Medium
 drafts. Neither is public, so neither has a confirm step or the limit gate.

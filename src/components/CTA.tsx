@@ -133,6 +133,16 @@ export default function CTA() {
                   FAQs
                 </SectionLink>
               </li>
+              <li>
+                <a href="/privacy.html" className={linkClass}>
+                  Privacy
+                </a>
+              </li>
+              <li>
+                <a href="/terms.html" className={linkClass}>
+                  Terms
+                </a>
+              </li>
             </FooterColumn>
 
             <FooterColumn title="Account">

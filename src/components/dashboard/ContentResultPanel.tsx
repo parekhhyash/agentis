@@ -10,6 +10,7 @@ import {
   textLength,
   variantAsText,
   wordCount,
+  xIntentUrl,
   type ContentPiece,
   type ContentResult,
   type ContentVariant,
@@ -259,6 +260,21 @@ function PieceCard({
     }
   }
 
+  // Without X's paid API, X opens with the post (or a thread's first post)
+  // filled in; the whole thread goes to the clipboard for the rest.
+  async function openInX() {
+    const thread = SHAPES[piece.format] === 'thread'
+    window.open(xIntentUrl(thread ? (draft.parts[0] ?? '') : draft.text), '_blank', 'noopener')
+    if (thread && draft.parts.length > 1) {
+      try {
+        await navigator.clipboard.writeText(draft.parts.join('\n\n'))
+        setMessage({ tone: 'ok', text: 'X opened with post 1. The whole thread is copied: add the rest with the + button in X.' })
+      } catch {
+        setMessage({ tone: 'ok', text: 'X opened with post 1. Add the rest with the + button in X.' })
+      }
+    }
+  }
+
   async function copyMedium() {
     try {
       await copyForMedium({ ...variant, text: draft.text }, piece.format)
@@ -370,7 +386,17 @@ function PieceCard({
           )}
           {network &&
             !published &&
-            (!status?.configured ? (
+            (!status?.configured && network === 'x' ? (
+              <button
+                type="button"
+                disabled={overLimit}
+                title={overLimit ? 'Shorten it to fit the limit first' : 'Opens X with this post ready; you press Post'}
+                onClick={() => void openInX()}
+                className="rounded-full bg-ink px-3.5 py-1 text-sm font-semibold text-white hover:bg-ink/90 disabled:opacity-50 dark:bg-white dark:text-ink"
+              >
+                Open in X
+              </button>
+            ) : !status?.configured ? (
               <span className="text-xs text-slate-400">{NETWORK[network]} posting isn&rsquo;t set up on the server</span>
             ) : !status.connected ? (
               <button type="button" onClick={onOpenConnect} className="text-sm font-medium text-sky-600 hover:underline">

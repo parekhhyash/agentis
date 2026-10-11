@@ -173,6 +173,13 @@ function storyMarkdown(variant: ContentVariant, format: string): string {
   return [variant.title && `# ${variant.title}`, subtitle, variant.text].filter(Boolean).join('\n\n')
 }
 
+// X's own "post intent" link: opens X with the text filled in, and the user
+// presses Post from their own account. Free, with no developer app needed
+// (X's API is pay-per-use for new developers since February 2026).
+export function xIntentUrl(text: string): string {
+  return `https://x.com/intent/tweet?text=${encodeURIComponent(text)}`
+}
+
 // A story for Medium's editor: title, subtitle and body as rich text.
 export async function copyForMedium(variant: ContentVariant, format: string): Promise<void> {
   const markdown = storyMarkdown(variant, format)
