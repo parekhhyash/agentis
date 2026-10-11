@@ -23,7 +23,6 @@ import {
 import RichText from './RichText'
 
 const NETWORK: Record<SocialProvider, string> = { linkedin: 'LinkedIn', x: 'X', notion: 'Notion', medium: 'Medium' }
-const CRITERIA = ['hook', 'clarity', 'specificity', 'voice', 'cta'] as const
 const PUBLIC: SocialProvider[] = ['linkedin', 'x']
 
 function publishedText(pub: Publication): string {
@@ -398,7 +397,7 @@ function PieceCard({
   }
 
   // Saves the edits; the server checks the option again (limits, your
-  // requirements, figures, claims) and returns it with its new score.
+  // requirements, figures, claims) and returns it.
   async function save(): Promise<boolean> {
     if (!dirty) return true
     setSaving(true)
@@ -486,7 +485,6 @@ function PieceCard({
 
   const secondary = 'rounded-full border border-slate-300 px-3 py-1 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50'
   const primary = 'rounded-full bg-brand-blue px-3.5 py-1 text-sm font-semibold text-white hover:bg-brand-blue/90 disabled:opacity-50'
-  const scored = Object.keys(variant.scores).length > 0
   const tabNote = (v: ContentVariant) =>
     drafts[v.id] && Object.keys(changesIn(shape, drafts[v.id], v)).length > 0 ? 'Unsaved' : v.edited ? 'Edited' : ''
 
@@ -512,7 +510,6 @@ function PieceCard({
               }`}
             >
               <span className="font-semibold">Option {i + 1}</span>
-              {v.score != null && <span className="ml-1 tabular-nums text-slate-500">{v.score.toFixed(1)}</span>}
               {v.id === piece.recommended_id && <span className="ml-1.5 font-semibold text-brand-blue">Recommended</span>}
               {(v.angle || tabNote(v)) && (
                 <span className="block text-[11px] text-slate-400">{[v.angle, tabNote(v)].filter(Boolean).join(' · ')}</span>
@@ -547,18 +544,6 @@ function PieceCard({
             </li>
           ))}
         </ul>
-      )}
-
-      {(variant.reason || scored) && (
-        <p className="mt-2 text-xs text-slate-500">
-          {variant.reason}
-          {scored && (
-            <span className="ml-1 text-slate-400">
-              ({CRITERIA.filter((c) => c in variant.scores).map((c) => `${c} ${variant.scores[c]}`).join(' · ')})
-            </span>
-          )}
-          {variant.edited && scored && <span className="ml-1 text-slate-400">Scored before your edits.</span>}
-        </p>
       )}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -669,9 +654,11 @@ export default function ContentResultPanel({
   onResultChange: (result: ContentResult) => void
   onOpenConnect: () => void
 }) {
+  // Scores are the agent's own working notes; older results had them in the summary.
+  const summary = result.summary.replace(/\s?\(\d+(?:\.\d+)?\/10\)/g, '')
   return (
     <div className="space-y-4">
-      {result.summary && <p className="text-sm text-slate-700">{result.summary}</p>}
+      {summary && <p className="text-sm text-slate-700">{summary}</p>}
       {result.pieces.map((piece) => (
         <PieceCard
           key={piece.id}

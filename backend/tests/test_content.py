@@ -110,7 +110,11 @@ def test_agent_writes_checks_repairs_scores_and_ranks():
     assert story.score is not None and data_led.score is not None
     assert linkedin.recommended_id == linkedin.variants[0].id
     assert linkedin.variants[0].score >= linkedin.variants[1].score
-    assert "LinkedIn post option" in result.summary and result.usage.llm_calls == 6
+    # Brief, 2 writes, 1 repair, 2 reviews, 2 rewrites, 2 reviews of the rewrites.
+    assert "LinkedIn post option" in result.summary and result.usage.llm_calls == 10
+    assert "/10" not in result.summary
+    # The too-long X rewrite broke the limit again, so the repaired drafts stayed.
+    assert all(formats.x_length(v.text) <= 280 for v in x.variants)
 
 
 # --- LinkedIn and X -----------------------------------------------------------------

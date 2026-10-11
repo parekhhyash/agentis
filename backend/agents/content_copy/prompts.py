@@ -91,6 +91,16 @@ REPAIR_USER = """These options break the format's rules:
 Rewrite only those options so they pass, keeping their angle and message. Return all {count} options \
 in the same order, as the same JSON."""
 
+IMPROVE_USER = """An editor reviewed your options, and the checks flagged some problems:
+{notes}
+
+Rewrite every option to fix what they found: a stronger first line where the hook is weak, concrete \
+detail about this company and audience instead of generic lines, and a clear, specific next step. Keep \
+each option's angle and core message and meet every requirement in the brief. Don't make it longer \
+unless it's under a length requirement. Cut any claim about the company that THEIR COMPANY and the \
+FACTS don't back rather than swapping in another. Return all {count} options in the same order, as \
+the same JSON."""
+
 JUDGE_SYSTEM = """You are a strict content editor. Score each option for the brief from 0 to 10 on:
 - hook: would the first line make the audience stop and read?
 - clarity: is the message easy to follow, with one clear point?

@@ -185,3 +185,71 @@ def test_patch_route_sends_only_the_fields_given(stored, monkeypatch):
         assert client.patch(f"/content/requests/{REQUEST_ID}/variants/s1", json={"title": "No piece"}).status_code == 422
     finally:
         main.app.dependency_overrides.clear()
+
+
+# --- the rewrite round -------------------------------------------------------------------
+
+class RewriteLLM:
+    """Writes a generic draft and a decent one; the rewrite improves the first
+    and makes the second worse, and the editor scores what it sees."""
+
+    def __init__(self, *, high_scores: bool = False):
+        self.rewrite_user = ""
+        self.high = high_scores
+
+    async def complete_json(self, *, system, user, tier, max_tokens):
+        if "turn the request into a brief" in system:
+            return LLMResult(data={"pieces": [{"format": "linkedin_post", "topic": "Agentis", "variants": 2}], "facts": []}, tokens=1)
+        if "strict content editor" in system:
+            options = json.loads(user.split("OPTIONS:\n", 1)[1])
+            table = {
+                "We help businesses grow with AI.": (6, "Generic opening and a vague call to action."),
+                "Ramesh answers WhatsApp until midnight. Agentis drafts the replies; he approves them. Try it this week.": (9, "Concrete."),
+                "Agentis gives a small team AI agents for support and sales.": (8, "Clear but plain."),
+                "Agentis. AI. Agents.": (5, "Choppy."),
+            }
+            scores = []
+            for o in options:
+                value, reason = table[o["text"]]
+                value = 9.5 if self.high else value
+                scores.append({"id": o["id"], **{c: value for c in ("hook", "clarity", "specificity", "voice", "cta")}, "reason": reason})
+            return LLMResult(data={"scores": scores}, tokens=1)
+        if "An editor reviewed your options" in user:
+            self.rewrite_user = user
+            return LLMResult(data={"variants": [
+                {"angle": "Story", "text": "Ramesh answers WhatsApp until midnight. Agentis drafts the replies; he approves them. Try it this week."},
+                {"angle": "Plain", "text": "Agentis. AI. Agents."},
+            ]}, tokens=1)
+        return LLMResult(data={"variants": [
+            {"angle": "Story", "text": "We help businesses grow with AI."},
+            {"angle": "Plain", "text": "Agentis gives a small team AI agents for support and sales."},
+        ]}, tokens=1)
+
+
+def test_options_are_rewritten_from_the_critique_and_the_better_version_kept():
+    llm = RewriteLLM()
+    result = asyncio.run(ContentAgent(llm).run("A LinkedIn post about Agentis", company={"company_name": "Agentis"}, today=NOW))
+    piece = result.pieces[0]
+    story = next(v for v in piece.variants if v.angle == "Story")
+    plain = next(v for v in piece.variants if v.angle == "Plain")
+    # The critique reached the rewrite: the editor's note and the weak criteria.
+    assert "editor: Generic opening and a vague call to action." in llm.rewrite_user
+    assert "weakest: hook 6/10" in llm.rewrite_user and "cta 6/10" in llm.rewrite_user
+    # The improved story replaced the generic draft; the worse rewrite of the other was dropped.
+    assert story.text.startswith("Ramesh") and story.score == 9.0
+    assert plain.text == "Agentis gives a small team AI agents for support and sales." and plain.score == 8.0
+    assert piece.recommended_id == story.id and piece.variants[0] is story
+    assert "/10" not in result.summary and "option 1" in result.summary
+
+
+def test_no_rewrite_when_every_option_is_already_strong_or_time_is_short(monkeypatch):
+    strong = RewriteLLM(high_scores=True)
+    result = asyncio.run(ContentAgent(strong).run("A LinkedIn post", company={}, today=NOW))
+    assert strong.rewrite_user == "" and result.usage.llm_calls == 3  # brief, write, review
+
+    from agents.content_copy import agent as agent_module
+
+    monkeypatch.setattr(agent_module, "IMPROVE_WITHIN_SECONDS", -1.0)
+    late = RewriteLLM()
+    result = asyncio.run(ContentAgent(late).run("A LinkedIn post", company={}, today=NOW))
+    assert late.rewrite_user == "" and result.usage.llm_calls == 3

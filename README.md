@@ -40,7 +40,7 @@ The system is built as a **React + TypeScript** frontend (Vite) paired with a **
 - **General Agent** — The default chat agent: answers questions with company and conversation context, or hands the task to the right specialist
 - **CRM integrations over MCP** — Connect **HubSpot**, **Salesforce** or **Zoho CRM** through their official MCP servers. Ask General about contacts, companies and deals, ask it to update records, or add researched leads with one click. Lookups run on their own; every change is a draft you approve; delete and merge tools are never used
 - **Data & Reporting Agent** — Answers questions about numbers with headline figures, charts and tables, from the user's Agentis activity (leads, emails, replies, meetings) and CSV/Excel files they upload. The model plans queries; the backend runs every calculation, and the written summary may only quote numbers that the queries produced
-- **Content & Copy Agent** — Writes LinkedIn posts, X posts and threads, Instagram captions, blog posts, Medium stories, emails and ad copy, plus any other writing to the user's own requirements (press releases, web pages, product descriptions, scripts), several options per piece. The backend checks every option against the platform's real limits (X counts links as 23 and emoji as 2) and against what the user asked for (word or character limits, phrases to include, sections), flags clichés and figures that aren't in the request, fixes rule-breaking drafts once, then scores and recommends one
+- **Content & Copy Agent** — Writes LinkedIn posts, X posts and threads, Instagram captions, blog posts, Medium stories, emails and ad copy, plus any other writing to the user's own requirements (press releases, web pages, product descriptions, scripts), several options per piece. The backend checks every option against the platform's real limits (X counts links as 23 and emoji as 2) and against what the user asked for (word or character limits, phrases to include, sections), flags clichés and figures that aren't in the request, fixes rule-breaking drafts once, has an editor critique every option and rewrites them from that critique, then recommends one
 - **Notion and Medium** — Save any draft as a private page in the user's Notion workspace, or a story as a Medium draft (Medium only issues API tokens to accounts that made one before 2025; everyone else gets "Copy for Medium", which pastes with headings and emphasis intact)
 - **LinkedIn and X posting** — Connect a LinkedIn profile and post a chosen option (edited or not) straight from the chat, after a confirm step; without a connection, "Open in LinkedIn" opens LinkedIn's post box with the draft (and copies it). X uses its free post intent: "Open in X" opens X's composer with the draft filled in (direct posting through X's paid API turns on only if X keys are set)
 - **Operations Agent (scheduled tasks)** — Put any agent on a schedule in plain words (*"every Monday at 9, report last week's emails and replies and email it to me"*). Each task is 1 to 3 steps run in order into its own chat, daily, weekly, monthly or once, in the user's time zone. Every change is a card the user confirms; runs only draft, so emails, CRM changes and posts still wait for approval. A Scheduled page lists tasks with Run now, Pause, Resume and Delete, and an optional summary email arrives from the user's own Gmail
@@ -448,16 +448,26 @@ Request + company context + earlier turns of the chat
 │ 4. Repair              Options with errors go back once with     │
 │                        the exact problems                        │
 ├──────────────────────────────────────────────────────────────────┤
-│ 5. Judge               Scores hook, clarity, specificity, voice  │
-│                        and call to action, and quotes any claim  │
+│ 5. Review              An editor model scores hook, clarity,     │
+│                        specificity, voice and call to action,    │
+│                        says what's weak, and quotes any claim    │
 │                        about the company (a feature, channel,    │
 │                        language, price, result) that the company │
 │                        profile and facts don't back; minus a     │
 │                        penalty for failed checks and those       │
-│                        claims. Recommended = best option with no │
-│                        errors                                    │
+│                        claims                                    │
+├──────────────────────────────────────────────────────────────────┤
+│ 6. Improve             Options below 9 on any criterion or with  │
+│                        a flagged check are rewritten once from   │
+│                        that critique, checked and reviewed       │
+│                        again; each option keeps whichever        │
+│                        version scored higher (a rewrite that     │
+│                        breaks more rules never wins).            │
+│                        Recommended = best option with no errors  │
 └──────────────────────────────────────────────────────────────────┘
 ```
+
+Scores and the editor's notes are the agent's own working notes, used to improve and rank the options; the chat shows the improved options, which one is recommended, and only the checks still worth a look. The rewrite round is skipped when every option is already strong, or when a run has taken over 150 seconds (runs stop at 300).
 
 | Format | Limit used |
 |---|---|
@@ -474,7 +484,7 @@ Request + company context + earlier turns of the chat
 
 **No invented features** — The writer may describe the company only with what its profile and the user's facts say. The judge also gets the profile and quotes, word for word, any claim about the company that isn't backed; a quote is kept only if the option really says it, and shows as "Not in your company profile: "…"" (1 point off each, up to 3; other warnings are 0.5 each, up to 2; errors 3 each).
 
-**Editing** — Every field of every option is editable in the chat, like the email drafts: post text, thread posts, title, subtitle and body (with a preview), Medium tags, email subject and preview line, ad headlines and descriptions. "Save changes" stores the edit (`PATCH /content/requests/{id}/variants/{variant_id}`), where the code checks run again against the same figures the original was checked with, flagged claims the edit removed are dropped, and the score is the editor's original scores minus the new penalties. Posting or saving an option with unsaved edits saves them first; an option already posted on LinkedIn or X can't be changed.
+**Editing** — Every field of every option is editable in the chat, like the email drafts: post text, thread posts, title, subtitle and body (with a preview), Medium tags, email subject and preview line, ad headlines and descriptions. "Save changes" stores the edit (`PATCH /content/requests/{id}/variants/{variant_id}`), where the code checks run again against the same figures the original was checked with, and flagged claims the edit removed are dropped. Posting or saving an option with unsaved edits saves them first; an option already posted on LinkedIn or X can't be changed.
 
 **Posting** — X options have "Open in X", which opens X's own composer with the draft filled in (free, nothing to connect). LinkedIn options have "Open in LinkedIn" until a LinkedIn profile is connected: it opens LinkedIn's post box with the text (`linkedin.com/feed/?shareActive=true&text=`, which LinkedIn doesn't document, so the post is also copied for pasting if the box comes up empty). Once the network is connected (for X, only if X's paid API keys are set), the option has a "Post to …" button instead. Posting re-runs the limit checks on the (possibly edited) text, asks for confirmation, then posts as the user: LinkedIn through the Posts API (`w_member_social`), X through `POST /2/tweets` (threads as replies to the previous post). Each option can be posted once per network; the post link is saved on the chat turn. If an X thread fails partway, the posts that went out are recorded.
 
@@ -524,7 +534,7 @@ Steps use the existing agents (Data & Reporting, Sales & Outreach, Lead Research
 3. **Pick an Agent** — Ask General (the default), or pick Lead Research, Sales & Outreach, Data & Reporting, Content & Copy or Operations in the task composer; attach a CSV or Excel file with the paperclip to ask about your own numbers
 4. **Describe the Task** — Enter a natural-language request (e.g., *"Find 10 fintech startups in Southeast Asia"*)
 5. **Watch Progress** — The agent runs and pushes live step-by-step progress visible in the chat view
-6. **Review Results** — Lead Research shows a table of qualified companies with contacts and evidence; Sales & Outreach shows editable email/meeting draft cards; Data & Reporting shows a summary with number tiles, charts and tables (each with its calculation, a table view and CSV download); Content & Copy shows each piece with scored options you can edit and save (checked again on save), character counters and the checks it failed
+6. **Review Results** — Lead Research shows a table of qualified companies with contacts and evidence; Sales & Outreach shows editable email/meeting draft cards; Data & Reporting shows a summary with number tiles, charts and tables (each with its calculation, a table view and CSV download); Content & Copy shows each piece's options, the recommended one marked, which you can edit and save (checked again on save), with character counters and any checks still worth a look
 7. **Take Action** — Export leads as CSV, approve/edit/discard outreach drafts, or copy, edit and post content to LinkedIn or X
 8. **Iterate** — Start new chats, link lead research results to outreach runs, review history in the sidebar
 9. **Automate** — Ask Operations to repeat any of it on a schedule; manage tasks on the Scheduled page
@@ -802,8 +812,8 @@ The frontend runs at `http://localhost:5173` and the backend at `http://localhos
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| `POST` | `/content/run` | ✅ Bearer | Write, check and score content for a request |
-| `PATCH` | `/content/requests/{id}/variants/{variant_id}` | ✅ Bearer | Save the user's edits to one option (`piece_id` plus any of `title`, `subtitle`, `text`, `parts`, `headlines`, `descriptions`, `tags`); returns it checked and scored again |
+| `POST` | `/content/run` | ✅ Bearer | Write, check, review and improve content for a request |
+| `PATCH` | `/content/requests/{id}/variants/{variant_id}` | ✅ Bearer | Save the user's edits to one option (`piece_id` plus any of `title`, `subtitle`, `text`, `parts`, `headlines`, `descriptions`, `tags`); returns it checked again |
 | `POST` | `/content/requests/{id}/publish` | ✅ Bearer | Post or save one option (`piece_id`, `variant_id`, `provider`: `linkedin`, `x`, `notion` or `medium`, optional edited `text` or `parts`) |
 | `GET` | `/integrations/social` | ✅ Bearer | LinkedIn, X, Notion and Medium status for the user (`connect_with`: `oauth` or `token`) |
 | `POST` | `/integrations/social/{provider}/connect` | ✅ Bearer | Returns the sign-in URL (`linkedin`, `x` or `notion`) |

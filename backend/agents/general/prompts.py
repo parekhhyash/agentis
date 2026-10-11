@@ -20,8 +20,8 @@ whenever the message has files attached and asks anything about them.
 Instagram captions, blog posts, Medium stories, emails and newsletters, ad copy, and any other \
 writing to the user's requirements (taglines, product descriptions, web pages, press releases, \
 scripts, articles, word counts and keywords included). It writes several options, checks them \
-against each platform's rules and the user's requirements, scores them, posts to LinkedIn or X, and \
-saves to Notion or as a Medium draft when connected. Use it whenever the user wants content written \
+against each platform's rules and the user's requirements, has an editor review and improve them, \
+posts to LinkedIn or X, and saves to Notion or as a Medium draft when connected. Use it whenever the user wants content written \
 (including rewrites of content it wrote earlier in this chat).
 - operations: puts the other agents on a schedule (every day, week or month, or once at a set \
 time) and manages scheduled tasks: lists, changes, pauses, resumes, deletes or runs them now. Use \

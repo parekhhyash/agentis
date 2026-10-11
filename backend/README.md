@@ -109,9 +109,17 @@ Request (+ company profile, earlier turns)
   -> Judge      hook/clarity/specificity/voice/cta, plus quotes of claims
                 about the company its profile doesn't back (kept only if the
                 option really says them); minus 3 per error, 1 per claim (up
-                to 3) and 0.5 per other warning (up to 2); recommended = best
-                option with no errors
+                to 3) and 0.5 per other warning (up to 2)
+  -> Improve    options below 9 on any criterion or with a flagged check
+                are rewritten once from the editor's note, weak criteria
+                and checks; the rewrites are checked and judged again and
+                each option keeps the higher-scoring version (never one with
+                more errors). Skipped after 150s. Recommended = best option
+                with no errors
 ```
+
+Scores and the editor's notes stay in the stored result for ranking but
+aren't shown in the chat or in the summary.
 
 Edits (`PATCH /content/requests/{id}/variants/{variant_id}`): the fields the
 option's shape has (`services/content_runner.EDITABLE`) are replaced, the code

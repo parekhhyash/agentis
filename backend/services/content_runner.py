@@ -25,7 +25,8 @@ from services.outreach_runner import OutreachError, _owned_request, _to_outreach
 from services.progress_reporter import ProgressTracker
 from services.request_store import finalize_request
 
-RUN_TIMEOUT_SECONDS = 180.0
+# Writing, reviewing, a rewrite round and a second review.
+RUN_TIMEOUT_SECONDS = 300.0
 # Public posts; Notion pages and Medium drafts are private until the user shares them.
 PUBLIC = ("linkedin", "x")
 

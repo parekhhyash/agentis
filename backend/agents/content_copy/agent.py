@@ -1,16 +1,20 @@
 """Content & Copy agent: brief -> several drafts per piece -> rule checks in
 code -> one repair round for drafts that break hard rules -> an editor model
-scores each draft -> ranked, with the best one recommended.
+scores and critiques each draft -> one rewrite round from that critique ->
+the editor scores the rewrites, and each option keeps whichever version
+scored higher -> ranked, with the best one recommended.
 
-The final score is the editor's average minus penalties from the code
-checks and from claims about the company that its profile doesn't back, so a
-draft that is over X's limit, invents a figure or a feature can't win on
-style alone.
+A score is the editor's average minus penalties from the code checks and
+from claims about the company that its profile doesn't back, so a draft that
+is over X's limit, invents a figure or a feature can't win on style alone.
+Scores and critiques are the agent's own working notes; the user sees the
+improved drafts and any checks still worth a look.
 """
 
 import asyncio
 import json
 import logging
+import time
 import uuid
 from collections.abc import Awaitable, Callable
 from datetime import datetime
@@ -27,6 +31,11 @@ MAX_VARIANTS = 4
 MAX_WORDS = 6000
 MAX_TOKENS = 16000
 CRITERIA = ("hook", "clarity", "specificity", "voice", "cta")
+# Options scoring at least this on every criterion, with no failed checks,
+# aren't rewritten.
+GOOD_ENOUGH = 9.0
+# No rewrite round once a run has taken this long (the run stops at 300s).
+IMPROVE_WITHIN_SECONDS = 150.0
 
 StepCallback = Callable[[str], Awaitable[None]]
 
@@ -119,6 +128,36 @@ def _for_prompt(variant: Variant, fmt: formats.Format) -> dict[str, Any]:
     return out
 
 
+def _errors(variant: Variant) -> int:
+    return sum(i.level == "error" for i in variant.issues)
+
+
+def _needs_work(variant: Variant) -> bool:
+    return bool(variant.issues) or any(s < GOOD_ENOUGH for s in variant.scores.values())
+
+
+def _feedback(number: int, variant: Variant) -> str:
+    """One option's critique for the rewrite: the editor's note, its weakest
+    criteria and what the checks found."""
+    notes = []
+    if variant.reason:
+        notes.append(f"editor: {variant.reason}")
+    weak = [f"{c} {variant.scores[c]:g}/10" for c in CRITERIA if variant.scores.get(c, 10) < GOOD_ENOUGH]
+    if weak:
+        notes.append("weakest: " + ", ".join(weak))
+    if variant.issues:
+        notes.append("checks: " + "; ".join(i.message for i in variant.issues))
+    return f"- option {number}: " + (" | ".join(notes) or "no problems found; polish only")
+
+
+def _better(new: Variant, old: Variant) -> bool:
+    """A rewrite replaces the original when it breaks no more rules and the
+    editor scores it at least as high."""
+    if new.score is None or _errors(new) > _errors(old):
+        return False
+    return old.score is None or new.score >= old.score
+
+
 class ContentAgent:
     def __init__(self, llm: LLMClient, *, on_step: StepCallback | None = None):
         self._llm = llm
@@ -140,6 +179,7 @@ class ContentAgent:
     ) -> ContentResult:
         company = company or {}
         result = ContentResult(request=request)
+        self._started = time.monotonic()
         await self._step("Working out the brief")
         brief = await self._json(
             result,
@@ -229,13 +269,47 @@ class ContentAgent:
             except Exception as exc:  # noqa: BLE001 - keep the drafts we have
                 logger.warning("Content repair failed: %s", exc)
 
-        await self._step(f"Scoring the {label} options")
+        await self._step(f"Reviewing the {label} options")
         await self._score(result, fmt, brief, variants, company, facts)
+        variants = await self._improve(result, fmt, label, system, user, tokens, brief, variants, company, facts, allowed, req)
         variants.sort(key=lambda v: (v.score is None, -(v.score or 0)))
         piece.variants = variants
         clean = [v for v in variants if not any(i.level == "error" for i in v.issues)]
         piece.recommended_id = (clean or variants)[0].id
         return piece
+
+    async def _improve(
+        self, result: ContentResult, fmt: formats.Format, label: str, system: str, user: str, tokens: int,
+        brief: dict[str, Any], variants: list[Variant], company: dict[str, Any], facts: list[str],
+        allowed: set[str], req: Requirements,
+    ) -> list[Variant]:
+        """Rewrite the options from the editor's critique and the checks, then
+        keep, per option, whichever version scores higher (a rewrite that
+        breaks more rules than the original never wins)."""
+        if not any(_needs_work(v) for v in variants):
+            return variants
+        if time.monotonic() - getattr(self, "_started", time.monotonic()) > IMPROVE_WITHIN_SECONDS:
+            return variants
+        await self._step(f"Improving the {label} options")
+        notes = "\n".join(_feedback(i, v) for i, v in enumerate(variants, 1))
+        improve_user = (
+            user + "\n\nYOUR OPTIONS:\n" + json.dumps({"variants": [_for_prompt(v, fmt) for v in variants]}, ensure_ascii=False)
+            + "\n\n" + prompts.IMPROVE_USER.format(notes=notes, count=len(variants))
+        )
+        try:
+            data = await self._json(result, system, improve_user, tokens)
+        except Exception as exc:  # noqa: BLE001 - keep the drafts we have
+            logger.warning("Content rewrite failed: %s", exc)
+            return variants
+        revised = [_variant(v, fmt.shape) for v in (data.get("variants") or []) if isinstance(v, dict)]
+        if len(revised) != len(variants):
+            return variants
+        for old, new in zip(variants, revised):
+            new.id, new.angle = old.id, old.angle or new.angle
+            new.issues = checks.check(new, fmt, allowed, req)
+        await self._step(f"Checking the improved {label} options")
+        await self._score(result, fmt, brief, revised, company, facts)
+        return [new if _better(new, old) else old for old, new in zip(variants, revised)]
 
     async def _score(
         self, result: ContentResult, fmt: formats.Format, brief: dict[str, Any], variants: list[Variant],
@@ -283,11 +357,10 @@ class ContentAgent:
             best = next((v for v in piece.variants if v.id == piece.recommended_id), None)
             if not best:
                 continue
-            score = f" ({best.score}/10)" if best.score is not None else ""
             angle = f", the {best.angle.lower()} angle" if best.angle else ""
             if len(piece.variants) == 1:
-                lines.append(f"Here's the {piece.label.lower() if piece.label[1:2].islower() else piece.label}{score}.")
+                lines.append(f"Here's the {piece.label.lower() if piece.label[1:2].islower() else piece.label}.")
                 continue
             number = piece.variants.index(best) + 1
-            lines.append(f"{len(piece.variants)} {piece.label} options; I'd go with option {number}{angle}{score}.")
+            lines.append(f"{len(piece.variants)} {piece.label} options; I'd go with option {number}{angle}.")
         return " ".join(lines) or "I couldn't write that; try rephrasing the request."
