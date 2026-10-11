@@ -173,6 +173,7 @@ agentis_new/
 │   │   ├── Hero.tsx              # Landing hero with prompt box
 │   │   ├── Features.tsx          # Feature showcase
 │   │   ├── HowItWorks.tsx        # Workflow explanation
+│   │   ├── ConnectorOrbit.tsx    # Integrations: connector logos orbiting the Agentis mark
 │   │   ├── ProtectedRoute.tsx    # Auth guard wrapper
 │   │   ├── ThemeToggle.tsx       # Dark/light mode switch
 │   │   ├── icons.tsx             # SVG icon components

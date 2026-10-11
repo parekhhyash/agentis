@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 
-import { AGENTS, HUB, NODES, STAGE_H, STAGE_W } from '../lib/agentNetwork'
+import { AGENTS, arcPath, HUB, NODES, STAGE_H, STAGE_W } from '../lib/agentNetwork'
 
 // The agent network drawn in "How it works" and, live, in the dashboard while
 // an agent runs: a hub with the six agents around it, each with its own
@@ -218,12 +218,11 @@ export function LiveAgentNetwork({
               />
             )
           })}
+          {/* The hand-off runs along the ring between the two agents. */}
           {from !== null && agent !== null && (
-            <line
-              x1={NODES[from].x}
-              y1={NODES[from].y}
-              x2={NODES[agent].x}
-              y2={NODES[agent].y}
+            <path
+              d={arcPath(from, agent)}
+              fill="none"
               strokeLinecap="round"
               strokeWidth="2.5"
               strokeDasharray="6 6"
@@ -254,7 +253,7 @@ export function LiveAgentNetwork({
         {from !== null && agent !== null && (
           <span
             className="absolute top-0 left-0 z-10 inline-flex animate-travel items-center gap-1 rounded-full bg-surface px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap text-slate-700 shadow-md ring-1 ring-slate-200 motion-reduce:animate-none"
-            style={{ offsetPath: `path('M ${NODES[from].x} ${NODES[from].y} L ${NODES[agent].x} ${NODES[agent].y}')`, offsetRotate: '0deg' }}
+            style={{ offsetPath: `path('${arcPath(from, agent)}')`, offsetRotate: '0deg' }}
           >
             <AgentBadge agent={from} className="h-3.5 w-3.5 [&_svg]:h-2 [&_svg]:w-2" />
             {carry}

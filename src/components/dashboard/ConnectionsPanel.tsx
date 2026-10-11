@@ -11,24 +11,25 @@ import SocialConnectControls from './SocialConnectControls'
 const CRM_IDS = new Set<string>(['hubspot', 'salesforce', 'zoho'])
 const SOCIAL_IDS = new Set<string>(['linkedin', 'x', 'notion', 'medium'])
 
-// The app's own logo: on a white tile, or a black one in dark mode, where
-// black marks (X, Notion, Medium) turn white. A pair overlaps, the second in front.
+// The app's own logo, straight on the card (no tile), in both themes; black
+// marks (X, Notion, Medium) turn white in dark mode. A pair overlaps, the
+// second in front with a ring in the card's colour.
 function Tile({ connector }: { connector: ConnectorInfo }) {
   const [first, second] = connector.logos
   const mark = connector.monochrome ? 'dark:invert' : ''
   return (
-    <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white ring-1 ring-slate-200 dark:bg-black">
+    <span className="relative flex h-11 w-11 shrink-0 items-center justify-center">
       {second ? (
         <>
-          <img src={first} alt="" className="absolute top-2 left-1.5 h-[18px] w-[22px] object-contain" />
+          <img src={first} alt="" className="absolute top-1.5 left-0.5 h-[22px] w-[26px] object-contain" />
           <img
             src={second}
             alt=""
-            className="absolute right-1.5 bottom-1.5 h-[18px] w-[18px] rounded-sm object-contain ring-2 ring-white dark:ring-black"
+            className="absolute right-0.5 bottom-1 h-[20px] w-[20px] rounded-sm bg-surface object-contain ring-2 ring-surface"
           />
         </>
       ) : (
-        <img src={first} alt="" className={`object-contain ${connector.id === 'zoho' ? 'w-9' : 'h-7 w-7'} ${mark}`} />
+        <img src={first} alt="" className={`object-contain ${connector.id === 'zoho' ? 'w-10' : 'h-8 w-8'} ${mark}`} />
       )}
     </span>
   )

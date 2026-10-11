@@ -30,6 +30,17 @@ export const NODES = AGENTS.map((_, i) => {
   return { x: HUB.x + Math.cos(a) * ORBIT, y: HUB.y + Math.sin(a) * ORBIT }
 })
 
+// Agents talk to each other along the ring they sit on: the shorter arc
+// from one node to the other (clockwise when they're opposite), as an SVG
+// path for the dashed link and for the hand-off travelling along it.
+export function arcPath(from: number, to: number): string {
+  const steps = (((to - from) % NODES.length) + NODES.length) % NODES.length
+  const clockwise = steps <= NODES.length / 2
+  const a = NODES[from]
+  const b = NODES[to]
+  return `M ${a.x} ${a.y} A ${ORBIT} ${ORBIT} 0 0 ${clockwise ? 1 : 0} ${b.x} ${b.y}`
+}
+
 // Which node each agent type sits on; the General agent works from the hub.
 export const AGENT_NODE: Partial<Record<AgentType, number>> = {
   lead_research: 0,

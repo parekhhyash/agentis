@@ -1,4 +1,5 @@
 import About from '../components/About'
+import ConnectorOrbit from '../components/ConnectorOrbit'
 import CTA from '../components/CTA'
 import Features from '../components/Features'
 import Hero from '../components/Hero'
@@ -15,6 +16,7 @@ export default function LandingPage() {
       <ScrollReveal />
       <Features />
       <HowItWorks />
+      <ConnectorOrbit />
       <QuoteCircles />
       <Testimonials />
       <CTA />

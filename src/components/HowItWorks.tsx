@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 
 import AgentCluster from './AgentCluster'
-import { AGENTS, HUB, NODES, ORBIT, STAGE_H, STAGE_W } from '../lib/agentNetwork'
+import { AGENTS, arcPath, HUB, NODES, ORBIT, STAGE_H, STAGE_W } from '../lib/agentNetwork'
 import { AgentBadge, AgentWork, CheckIcon, Stage } from './agentNetwork'
 
 // The three cards play one story together: a request is typed (01), routed
@@ -207,7 +207,7 @@ function RoutingVisual({ story, t }: Frame) {
   const secondWorking = second !== undefined && t >= HANDOFF_ARRIVE
   const firstWorking = arrived && !handingOff && !secondWorking
   const packet = t >= ROUTE_START + 150 ? NODES[first] : HUB
-  const parcel = second !== undefined && t >= HANDOFF + 150 ? NODES[second] : NODES[first]
+  const passed = second !== undefined && t >= HANDOFF + 150
   const linked = second !== undefined && t >= HANDOFF
 
   const status = !arrived
@@ -254,13 +254,11 @@ function RoutingVisual({ story, t }: Frame) {
             />
           )
         })}
-        {/* Agents talking to each other: a live link between the two. */}
+        {/* Agents talking to each other: the ring between the two comes alive. */}
         {second !== undefined && (
-          <line
-            x1={NODES[first].x}
-            y1={NODES[first].y}
-            x2={NODES[second].x}
-            y2={NODES[second].y}
+          <path
+            d={arcPath(first, second)}
+            fill="none"
             strokeLinecap="round"
             strokeWidth="2.5"
             strokeDasharray="6 6"
@@ -308,16 +306,16 @@ function RoutingVisual({ story, t }: Frame) {
         )
       })}
 
-      {/* What one agent hands the next. */}
+      {/* What one agent hands the next, travelling along the ring. */}
       {s.handoff && second !== undefined && (
         <span
-          className="absolute z-10 inline-flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full bg-surface px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap text-slate-700 shadow-md ring-1 ring-slate-200"
+          className="absolute top-0 left-0 z-10 inline-flex items-center gap-1 rounded-full bg-surface px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap text-slate-700 shadow-md ring-1 ring-slate-200"
           style={{
-            left: parcel.x,
-            top: parcel.y,
+            offsetPath: `path('${arcPath(first, second)}')`,
+            offsetRotate: '0deg',
+            offsetDistance: passed ? '100%' : '0%',
             opacity: handingOff ? 1 : 0,
-            transition:
-              'left 0.75s cubic-bezier(0.65, 0, 0.35, 1), top 0.75s cubic-bezier(0.65, 0, 0.35, 1), opacity 0.25s',
+            transition: 'offset-distance 0.75s cubic-bezier(0.65, 0, 0.35, 1), opacity 0.25s',
           }}
         >
           <AgentBadge agent={first} className="h-3.5 w-3.5 [&_svg]:h-2 [&_svg]:w-2" />
