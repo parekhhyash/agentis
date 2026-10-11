@@ -106,11 +106,13 @@ export default function ConnectorOrbit() {
   let n = 0
   return (
     <section id="integrations" className="relative z-10 overflow-x-clip px-4 py-24 sm:px-6 sm:py-32">
+      {/* The label is centred at the top, like every section's. */}
+      <p className="text-center text-sm font-semibold tracking-[0.2em] text-brand-blue uppercase">Integrations</p>
+
       {/* Stacked and centred on smaller screens; text left, orbit right on laptops. */}
-      <div className="mx-auto grid max-w-[78rem] items-center gap-10 sm:gap-14 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-8 min-[1680px]:max-w-[86rem]">
+      <div className="mx-auto mt-4 grid max-w-[78rem] items-center gap-10 sm:gap-14 lg:mt-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-8 min-[1680px]:max-w-[86rem]">
         <div className="mx-auto max-w-2xl text-center lg:mx-0 lg:max-w-md lg:text-left">
-          <span className="text-sm font-semibold tracking-[0.2em] text-brand-blue uppercase">Integrations</span>
-          <h2 className="font-display mt-4 text-4xl text-slate-900 sm:text-5xl">Your tools, one team of agents</h2>
+          <h2 className="font-display text-4xl text-slate-900 sm:text-5xl">Your tools, one team of agents</h2>
           <p className="mt-5 text-lg leading-relaxed text-slate-600">
             Connect Gmail, Sheets, your CRM and your social accounts once. Every agent can then read, draft and act in
             them, and nothing goes out until you approve it.
