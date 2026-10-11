@@ -4,7 +4,6 @@ import { CONNECTORS, type ConnectorInfo } from '../../lib/connectors'
 import type { SocialProvider, useSocialConnections } from '../../lib/content'
 import type { CrmProvider, useCrmConnections } from '../../lib/crm'
 import type { GoogleStatus } from '../../lib/googleConnection'
-import { GoogleIcon } from '../icons'
 import CrmConnectControls from './CrmConnectControls'
 import DataFilesPanel from './DataFilesPanel'
 import SocialConnectControls from './SocialConnectControls'
@@ -12,12 +11,20 @@ import SocialConnectControls from './SocialConnectControls'
 const CRM_IDS = new Set<string>(['hubspot', 'salesforce', 'zoho'])
 const SOCIAL_IDS = new Set<string>(['linkedin', 'x', 'notion', 'medium'])
 
+// The app's own logo on a white tile (white in dark mode too, so dark marks
+// like X's and Notion's stay visible). A pair overlaps, the second in front.
 function Tile({ connector }: { connector: ConnectorInfo }) {
+  const [first, second] = connector.logos
   return (
-    <span
-      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-lg font-semibold ${connector.tile}`}
-    >
-      {connector.id === 'google' ? <GoogleIcon className="h-5 w-5" /> : connector.monogram}
+    <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white ring-1 ring-slate-200">
+      {second ? (
+        <>
+          <img src={first} alt="" className="absolute top-2 left-1.5 h-[18px] w-[22px] object-contain" />
+          <img src={second} alt="" className="absolute right-1.5 bottom-1.5 h-[18px] w-[18px] rounded-sm object-contain ring-2 ring-white" />
+        </>
+      ) : (
+        <img src={first} alt="" className={`object-contain ${connector.id === 'zoho' ? 'w-9' : 'h-7 w-7'}`} />
+      )}
     </span>
   )
 }
