@@ -3,7 +3,8 @@ code -> one repair round for drafts that break hard rules -> an editor model
 scores each draft -> ranked, with the best one recommended.
 
 The final score is the editor's average minus penalties from the code
-checks, so a draft that is over X's limit or invents a figure can't win on
+checks and from claims about the company that its profile doesn't back, so a
+draft that is over X's limit, invents a figure or a feature can't win on
 style alone.
 """
 
@@ -151,6 +152,7 @@ class ContentAgent:
             raw_pieces = [{"format": "general", "topic": request, "variants": 3}]
         facts = _strings(brief.get("facts"), 40)
         allowed = checks.allowed_figures(request, history, _company_text(company), *facts)
+        result.allowed_figures = sorted(allowed)
 
         labels = ", ".join(self._label(formats.get(str(p.get("format"))), p) for p in raw_pieces)
         await self._step(f"Writing {labels}")
@@ -228,24 +230,31 @@ class ContentAgent:
                 logger.warning("Content repair failed: %s", exc)
 
         await self._step(f"Scoring the {label} options")
-        await self._score(result, piece, fmt, brief, variants)
+        await self._score(result, fmt, brief, variants, company, facts)
         variants.sort(key=lambda v: (v.score is None, -(v.score or 0)))
         piece.variants = variants
         clean = [v for v in variants if not any(i.level == "error" for i in v.issues)]
         piece.recommended_id = (clean or variants)[0].id
         return piece
 
-    async def _score(self, result: ContentResult, piece: Piece, fmt: formats.Format, brief: dict[str, Any], variants: list[Variant]) -> None:
+    async def _score(
+        self, result: ContentResult, fmt: formats.Format, brief: dict[str, Any], variants: list[Variant],
+        company: dict[str, Any], facts: list[str],
+    ) -> None:
+        """The editor scores each option and quotes any claim about the company
+        that the profile doesn't back; those become warnings that cost points."""
         try:
             data = await self._json(
                 result,
                 prompts.JUDGE_SYSTEM,
                 prompts.JUDGE_USER.format(
                     label=fmt.label,
+                    company=_company_text(company),
+                    facts="\n".join(f"- {f}" for f in facts) or "(none given)",
                     brief=json.dumps(brief, ensure_ascii=False),
                     options=json.dumps([_for_prompt(v, fmt) for v in variants], ensure_ascii=False, indent=1),
                 ),
-                200 + 120 * len(variants),
+                300 + 220 * len(variants),
             )
         except Exception as exc:  # noqa: BLE001 - unscored drafts are still usable
             logger.warning("Content scoring failed: %s", exc)
@@ -261,6 +270,8 @@ class ContentAgent:
                     continue
             v.scores = parts
             v.reason = " ".join(str(raw.get("reason") or "").split())[:240]
+            claims = [checks.claim_issue(v, q) for q in _strings(raw.get("unsupported"), 6)]
+            v.issues.extend(c for c in claims if c and not any(c.quote == i.quote for i in v.issues))
             if parts:
                 base = sum(parts.values()) / len(parts)
                 v.score = round(max(0.0, base - checks.penalty(v.issues)), 1)

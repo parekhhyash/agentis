@@ -42,7 +42,7 @@ The system is built as a **React + TypeScript** frontend (Vite) paired with a **
 - **Data & Reporting Agent** — Answers questions about numbers with headline figures, charts and tables, from the user's Agentis activity (leads, emails, replies, meetings) and CSV/Excel files they upload. The model plans queries; the backend runs every calculation, and the written summary may only quote numbers that the queries produced
 - **Content & Copy Agent** — Writes LinkedIn posts, X posts and threads, Instagram captions, blog posts, Medium stories, emails and ad copy, plus any other writing to the user's own requirements (press releases, web pages, product descriptions, scripts), several options per piece. The backend checks every option against the platform's real limits (X counts links as 23 and emoji as 2) and against what the user asked for (word or character limits, phrases to include, sections), flags clichés and figures that aren't in the request, fixes rule-breaking drafts once, then scores and recommends one
 - **Notion and Medium** — Save any draft as a private page in the user's Notion workspace, or a story as a Medium draft (Medium only issues API tokens to accounts that made one before 2025; everyone else gets "Copy for Medium", which pastes with headings and emphasis intact)
-- **LinkedIn and X posting** — Connect a LinkedIn profile and post a chosen option (edited or not) straight from the chat, after a confirm step. X uses its free post intent: "Open in X" opens X's composer with the draft filled in (direct posting through X's paid API turns on only if X keys are set)
+- **LinkedIn and X posting** — Connect a LinkedIn profile and post a chosen option (edited or not) straight from the chat, after a confirm step; without a connection, "Open in LinkedIn" opens LinkedIn's post box with the draft (and copies it). X uses its free post intent: "Open in X" opens X's composer with the draft filled in (direct posting through X's paid API turns on only if X keys are set)
 - **Operations Agent (scheduled tasks)** — Put any agent on a schedule in plain words (*"every Monday at 9, report last week's emails and replies and email it to me"*). Each task is 1 to 3 steps run in order into its own chat, daily, weekly, monthly or once, in the user's time zone. Every change is a card the user confirms; runs only draft, so emails, CRM changes and posts still wait for approval. A Scheduled page lists tasks with Run now, Pause, Resume and Delete, and an optional summary email arrives from the user's own Gmail
 - **Conversational Dashboard** — Chat-style UI where each agent request appears as a conversation with real-time progress updates
 - **Google Integration** — Secure OAuth 2.0 flow to connect Gmail (send, read, reply) and Google Calendar (create events with Meet links)
@@ -217,7 +217,7 @@ agentis_new/
 │   │   ├── routes.py             # /sales-agent/* endpoints
 │   │   ├── outreach.py           # /sales-outreach/* endpoints
 │   │   ├── integrations.py       # /integrations/google/* endpoints
-│   │   ├── content.py            # /content/* endpoints (run, publish)
+│   │   ├── content.py            # /content/* endpoints (run, save edits, publish)
 │   │   ├── social.py             # /integrations/social/* (LinkedIn, X, Notion, Medium)
 │   │   ├── operations.py         # /operations/* (agent, tasks, tick)
 │   │   └── models.py             # Pydantic request/response models
@@ -449,9 +449,13 @@ Request + company context + earlier turns of the chat
 │                        the exact problems                        │
 ├──────────────────────────────────────────────────────────────────┤
 │ 5. Judge               Scores hook, clarity, specificity, voice  │
-│                        and call to action; minus a penalty for   │
-│                        failed checks. Recommended = best option  │
-│                        with no errors                            │
+│                        and call to action, and quotes any claim  │
+│                        about the company (a feature, channel,    │
+│                        language, price, result) that the company │
+│                        profile and facts don't back; minus a     │
+│                        penalty for failed checks and those       │
+│                        claims. Recommended = best option with no │
+│                        errors                                    │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -466,9 +470,13 @@ Request + company context + earlier turns of the chat
 | Ad copy | Headlines ≤ 30, descriptions ≤ 90, primary text ≤ 125 |
 | Long-form piece / Copy | Whatever the user asked for: the brief names the piece ("Press release", "Product description") and records its requirements |
 
-**Requirements** — The brief records only what the user explicitly asked for: "about 500 words" becomes 425 to 575, "under 100 words" a maximum, plus character limits, phrases that must appear word for word, section names and other notes (language, reading level, bullet points). They override the format's usual length, are checked in code on every option (and again after an edit), and long pieces get fewer options and a larger writing budget. The chat shows "You asked for: …" with a live word count.
+**Requirements** — The brief records only what the user explicitly asked for: "about 500 words" becomes 425 to 575, "under 100 words" a maximum, plus character limits, phrases that must appear word for word, section names and other notes (language, reading level, bullet points). They override the format's usual length, are checked in code on every option (and again after an edit), and long pieces get fewer options and a larger writing budget. Words that only describe structure ("a headline and subheadings") go in the notes, not the sections, and "24/7" isn't treated as a figure.
 
-**Posting** — X options have "Open in X", which opens X's own composer with the draft filled in (free, nothing to connect). LinkedIn options (and X, if X's paid API keys are set) have a "Post to …" button once the network is connected. Posting re-runs the limit checks on the (possibly edited) text, asks for confirmation, then posts as the user: LinkedIn through the Posts API (`w_member_social`), X through `POST /2/tweets` (threads as replies to the previous post). Each option can be posted once per network; the post link is saved on the chat turn. If an X thread fails partway, the posts that went out are recorded.
+**No invented features** — The writer may describe the company only with what its profile and the user's facts say. The judge also gets the profile and quotes, word for word, any claim about the company that isn't backed; a quote is kept only if the option really says it, and shows as "Not in your company profile: "…"" (1 point off each, up to 3; other warnings are 0.5 each, up to 2; errors 3 each).
+
+**Editing** — Every field of every option is editable in the chat, like the email drafts: post text, thread posts, title, subtitle and body (with a preview), Medium tags, email subject and preview line, ad headlines and descriptions. "Save changes" stores the edit (`PATCH /content/requests/{id}/variants/{variant_id}`), where the code checks run again against the same figures the original was checked with, flagged claims the edit removed are dropped, and the score is the editor's original scores minus the new penalties. Posting or saving an option with unsaved edits saves them first; an option already posted on LinkedIn or X can't be changed.
+
+**Posting** — X options have "Open in X", which opens X's own composer with the draft filled in (free, nothing to connect). LinkedIn options have "Open in LinkedIn" until a LinkedIn profile is connected: it opens LinkedIn's post box with the text (`linkedin.com/feed/?shareActive=true&text=`, which LinkedIn doesn't document, so the post is also copied for pasting if the box comes up empty). Once the network is connected (for X, only if X's paid API keys are set), the option has a "Post to …" button instead. Posting re-runs the limit checks on the (possibly edited) text, asks for confirmation, then posts as the user: LinkedIn through the Posts API (`w_member_social`), X through `POST /2/tweets` (threads as replies to the previous post). Each option can be posted once per network; the post link is saved on the chat turn. If an X thread fails partway, the posts that went out are recorded.
 
 **Notion and Medium** — Every option has "Save to Notion": a private page at the top of the user's workspace, created from markdown (`POST /v1/pages` with `markdown`, `Notion-Version: 2026-03-11`). Articles (blog posts, Medium stories, long-form pieces) can also be saved as **Medium drafts** (`publishStatus: draft`; the user publishes from Medium). Neither is public, so they skip the confirm step and the limit gate; each option is saved once per destination and the link is kept on the chat turn.
 
@@ -516,7 +524,7 @@ Steps use the existing agents (Data & Reporting, Sales & Outreach, Lead Research
 3. **Pick an Agent** — Ask General (the default), or pick Lead Research, Sales & Outreach, Data & Reporting, Content & Copy or Operations in the task composer; attach a CSV or Excel file with the paperclip to ask about your own numbers
 4. **Describe the Task** — Enter a natural-language request (e.g., *"Find 10 fintech startups in Southeast Asia"*)
 5. **Watch Progress** — The agent runs and pushes live step-by-step progress visible in the chat view
-6. **Review Results** — Lead Research shows a table of qualified companies with contacts and evidence; Sales & Outreach shows editable email/meeting draft cards; Data & Reporting shows a summary with number tiles, charts and tables (each with its calculation, a table view and CSV download); Content & Copy shows each piece with scored options, character counters and the checks it failed
+6. **Review Results** — Lead Research shows a table of qualified companies with contacts and evidence; Sales & Outreach shows editable email/meeting draft cards; Data & Reporting shows a summary with number tiles, charts and tables (each with its calculation, a table view and CSV download); Content & Copy shows each piece with scored options you can edit and save (checked again on save), character counters and the checks it failed
 7. **Take Action** — Export leads as CSV, approve/edit/discard outreach drafts, or copy, edit and post content to LinkedIn or X
 8. **Iterate** — Start new chats, link lead research results to outreach runs, review history in the sidebar
 9. **Automate** — Ask Operations to repeat any of it on a schedule; manage tasks on the Scheduled page
@@ -625,7 +633,7 @@ Agentis registers **one app per network**; every company that uses Agentis then 
 
 | | How it works | Cost | Setup |
 |---|---|---|---|
-| LinkedIn | Posts as the member who connected (Share on LinkedIn) | Free | One LinkedIn app, below |
+| LinkedIn | Posts as the member who connected (Share on LinkedIn); before that, or without the app, "Open in LinkedIn" opens the post box with the draft | Free | One LinkedIn app, below (none for "Open in LinkedIn") |
 | X | "Open in X" opens X's own post composer with the draft filled in; the user presses Post | Free | None |
 | Notion | Saves a private page in the connected workspace | Free | One public Notion integration, below |
 | Medium | "Copy for Medium" (rich text), or a draft via a pre-2025 integration token | Free | None |
@@ -795,6 +803,7 @@ The frontend runs at `http://localhost:5173` and the backend at `http://localhos
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
 | `POST` | `/content/run` | ✅ Bearer | Write, check and score content for a request |
+| `PATCH` | `/content/requests/{id}/variants/{variant_id}` | ✅ Bearer | Save the user's edits to one option (`piece_id` plus any of `title`, `subtitle`, `text`, `parts`, `headlines`, `descriptions`, `tags`); returns it checked and scored again |
 | `POST` | `/content/requests/{id}/publish` | ✅ Bearer | Post or save one option (`piece_id`, `variant_id`, `provider`: `linkedin`, `x`, `notion` or `medium`, optional edited `text` or `parts`) |
 | `GET` | `/integrations/social` | ✅ Bearer | LinkedIn, X, Notion and Medium status for the user (`connect_with`: `oauth` or `token`) |
 | `POST` | `/integrations/social/{provider}/connect` | ✅ Bearer | Returns the sign-in URL (`linkedin`, `x` or `notion`) |
@@ -983,6 +992,7 @@ Test coverage includes:
 - Data & Reporting: file parsing, query checks and execution, summary number checks, live reply status (`test_data_reporting.py`)
 - Content & Copy: X character counting, limit and claim checks, repair and scoring, LinkedIn text escaping, X threads (including a partial failure), posting rules, token refresh (`test_content.py`)
 - Content requirements, Notion and Medium: requirement parsing and checks, long-form labels and repair, markdown export, Notion pages and Medium drafts, Notion sign-in and token refresh, Medium token check, where each format can go (`test_content_destinations.py`)
+- Content claims and edits: claims the company profile doesn't back (verified quotes, penalty), saving edits per shape, re-checking figures, requirements and claims, refusing posted options (`test_content_edits.py`)
 - Operations: schedule parsing, next run times (time zones, daylight saving, short months), proposal checks and repair, running due tasks step by step, failures and auto-pause, confirming proposals, the tick secret (`test_operations.py`)
 - LLM client behavior (`test_llm.py`)
 - Exa search provider (`test_exa.py`)

@@ -7,6 +7,8 @@ import { authedFetch } from './backendApi'
 export interface ContentIssue {
   level: 'error' | 'warning'
   message: string
+  // A claim about the company its profile doesn't back.
+  quote?: string | null
 }
 
 export interface Publication {
@@ -31,6 +33,8 @@ export interface ContentVariant {
   reason: string
   issues: ContentIssue[]
   published: Publication[]
+  // Changed by the user after it was written.
+  edited?: boolean
 }
 
 export interface Requirements {
@@ -87,21 +91,6 @@ export const SHAPES: Record<string, 'post' | 'thread' | 'article' | 'email' | 'a
 // Words as a reader counts them (backend/agents/content_copy/checks.py).
 export function wordCount(text: string): number {
   return (text.replace(/https?:\/\/\S+/g, ' link ').match(/[\p{L}\p{N}](?:[\p{L}\p{N}'’.-]*[\p{L}\p{N}])?/gu) ?? []).length
-}
-
-// What the user asked for, as one line: "500–700 words · include "free delivery"".
-export function requirementsText(req: Requirements | undefined): string {
-  if (!req) return ''
-  const parts: string[] = []
-  const words = (n: number) => n.toLocaleString('en-US')
-  if (req.min_words && req.max_words) parts.push(`${words(req.min_words)}–${words(req.max_words)} words`)
-  else if (req.max_words) parts.push(`at most ${words(req.max_words)} words`)
-  else if (req.min_words) parts.push(`at least ${words(req.min_words)} words`)
-  if (req.max_characters) parts.push(`at most ${words(req.max_characters)} characters`)
-  if (req.must_include.length) parts.push(`include ${req.must_include.map((p) => `“${p}”`).join(', ')}`)
-  if (req.sections.length) parts.push(`sections: ${req.sections.join(', ')}`)
-  if (req.notes) parts.push(req.notes)
-  return parts.join(' · ')
 }
 
 // Where an option can go: Notion takes anything, Medium any article, LinkedIn
@@ -180,6 +169,13 @@ export function xIntentUrl(text: string): string {
   return `https://x.com/intent/tweet?text=${encodeURIComponent(text)}`
 }
 
+// LinkedIn has no official link that fills in a post, so this opens the
+// post box with the text (LinkedIn fills it in when the link works) and the
+// caller copies the text too, for pasting if the box comes up empty.
+export function linkedinShareUrl(text: string): string {
+  return `https://www.linkedin.com/feed/?shareActive=true&text=${encodeURIComponent(text)}`
+}
+
 // A story for Medium's editor: title, subtitle and body as rich text.
 export async function copyForMedium(variant: ContentVariant, format: string): Promise<void> {
   const markdown = storyMarkdown(variant, format)
@@ -242,9 +238,17 @@ export function variantAsText(variant: ContentVariant, format: string): string {
 
 export function publishVariant(
   requestId: string,
-  body: { piece_id: string; variant_id: string; provider: SocialProvider; text?: string; parts?: string[] },
+  body: { piece_id: string; variant_id: string; provider: SocialProvider },
 ): Promise<ContentVariant> {
   return authedFetch<ContentVariant>(`/content/requests/${requestId}/publish`, { method: 'POST', body: JSON.stringify(body) })
+}
+
+// The parts of an option the user can change.
+export type VariantEdits = Partial<Pick<ContentVariant, 'title' | 'subtitle' | 'text' | 'parts' | 'headlines' | 'descriptions' | 'tags'>>
+
+// Saves the user's edits; the server checks the option again and returns it.
+export function saveVariant(requestId: string, variantId: string, body: VariantEdits & { piece_id: string }): Promise<ContentVariant> {
+  return authedFetch<ContentVariant>(`/content/requests/${requestId}/variants/${variantId}`, { method: 'PATCH', body: JSON.stringify(body) })
 }
 
 // --- LinkedIn / X connections ---------------------------------------------------

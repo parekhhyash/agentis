@@ -11,6 +11,8 @@ class Issue(BaseModel):
     # "error" breaks a hard rule (too long, empty); "warning" is worth a look.
     level: Literal["error", "warning"]
     message: str
+    # A claim about the company the profile doesn't back, word for word from the draft.
+    quote: str | None = None
 
 
 class Publication(BaseModel):
@@ -42,6 +44,8 @@ class Variant(BaseModel):
     reason: str = ""
     issues: list[Issue] = Field(default_factory=list)
     published: list[Publication] = Field(default_factory=list)
+    # The user changed it after it was written (the editor's scores are from before).
+    edited: bool = False
 
 
 class Requirements(BaseModel):
@@ -89,4 +93,6 @@ class ContentResult(BaseModel):
     summary: str = ""
     pieces: list[Piece] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
+    # Figures the user gave (request, chat, profile), so edits are checked the same way.
+    allowed_figures: list[str] = Field(default_factory=list)
     usage: ContentUsage = Field(default_factory=ContentUsage)

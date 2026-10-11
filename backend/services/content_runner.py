@@ -1,6 +1,6 @@
-"""Runs the Content & Copy agent, and publishes a chosen variant when the
-user asks: a post on LinkedIn or X, a private page in Notion, or a draft on
-Medium."""
+"""Runs the Content & Copy agent, keeps the user's edits to a draft (checked
+again in code), and publishes a chosen variant when the user asks: a post on
+LinkedIn or X, a private page in Notion, or a draft on Medium."""
 
 import asyncio
 from collections import defaultdict
@@ -12,7 +12,7 @@ import httpx
 from agents.content_copy import ContentAgent, ContentResult
 from agents.content_copy import checks, formats
 from agents.content_copy.export import as_markdown, page_title
-from agents.content_copy.schemas import Publication
+from agents.content_copy.schemas import Piece, Publication, Variant
 from agents.lead_research.llm import build_llm_client
 from config.settings import get_settings
 from integrations.social import connections as social
@@ -70,8 +70,87 @@ async def run_content(
     return result
 
 
-# One publish at a time per request, so a double click can't post twice.
+# One publish or save at a time per request, so a double click can't post twice.
 _locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+
+# The fields each shape of content has, which an edit may change.
+EDITABLE = {
+    "post": ("text",),
+    "thread": ("parts",),
+    "article": ("title", "subtitle", "text", "tags"),
+    "email": ("title", "subtitle", "text"),
+    "ad": ("headlines", "descriptions", "text"),
+}
+
+
+def _clean_list(values: list[str], *, tags: bool = False) -> list[str]:
+    out: list[str] = []
+    for value in values:
+        value = " ".join(value.split()).lstrip("#") if tags else value.strip()
+        if value and (not tags or value.lower() not in {t.lower() for t in out}):
+            out.append(value)
+    return out
+
+
+def apply_edits(variant: Variant, fmt: formats.Format, edits: dict[str, Any]) -> Variant:
+    """A copy of the variant with the user's changes to the fields its shape has."""
+    edited = variant.model_copy(deep=True)
+    for field in EDITABLE[fmt.shape]:
+        if edits.get(field) is None:
+            continue
+        value = edits[field]
+        if field in ("title", "subtitle"):
+            setattr(edited, field, " ".join(str(value).split()) or None)
+        elif field == "text":
+            edited.text = str(value).strip()
+        else:
+            setattr(edited, field, _clean_list(value, tags=field == "tags"))
+    return edited
+
+
+def recheck(result: ContentResult, piece: Piece, fmt: formats.Format, before: Variant, after: Variant) -> None:
+    """Run the code checks again on an edited draft, keep the flagged claims it
+    still makes, and take the new penalties off the editor's original scores."""
+    allowed = set(result.allowed_figures) or checks.allowed_figures(result.request, checks.all_text(before))
+    after.issues = checks.check(after, fmt, allowed, piece.requirements) + checks.claims_kept(before.issues, after)
+    if after.scores:
+        base = sum(after.scores.values()) / len(after.scores)
+        after.score = round(max(0.0, base - checks.penalty(after.issues)), 1)
+
+
+def _find(result: ContentResult, piece_id: str, variant_id: str) -> tuple[Piece, Variant] | None:
+    piece = next((p for p in result.pieces if p.id == piece_id), None)
+    variant = next((v for v in piece.variants if v.id == variant_id), None) if piece else None
+    return (piece, variant) if piece and variant else None
+
+
+async def save_variant(
+    user: AuthUser, request_id: str, *, piece_id: str, variant_id: str, edits: dict[str, Any]
+) -> dict[str, Any]:
+    """Keep the user's edits to a draft and check it again."""
+    async with _locks[request_id]:
+        row = await _owned_request(user.id, request_id, "content_copy")
+        result = ContentResult.model_validate(row.get("result") or {"request": ""})
+        found = _find(result, piece_id, variant_id)
+        if not found:
+            raise OutreachError("That draft wasn't found", 404)
+        piece, variant = found
+        posted = next((p for p in variant.published if p.provider in PUBLIC), None)
+        if posted:
+            raise OutreachError(f"This option is already posted on {NAMES[posted.provider]}, so it can't be changed", 409)
+        fmt = formats.get(piece.format)
+        edited = apply_edits(variant, fmt, edits)
+        if not checks.all_text(edited).strip():
+            raise OutreachError("This option can't be empty", 422)
+        recheck(result, piece, fmt, variant, edited)
+        edited.edited = True
+        piece.variants[piece.variants.index(variant)] = edited
+        await supabase_rest.update(
+            "agent_requests",
+            {"id": f"eq.{request_id}", "user_id": f"eq.{user.id}"},
+            {"result": result.model_dump(mode="json")},
+        )
+        return edited.model_dump(mode="json")
 
 
 async def publish_variant(
@@ -90,10 +169,10 @@ async def publish_variant(
         except OutreachError as exc:
             raise SocialError(str(exc), exc.status) from exc
         result = ContentResult.model_validate(row.get("result") or {"request": ""})
-        piece = next((p for p in result.pieces if p.id == piece_id), None)
-        variant = next((v for v in piece.variants if v.id == variant_id), None) if piece else None
-        if not piece or not variant:
+        found = _find(result, piece_id, variant_id)
+        if not found:
             raise SocialError("That draft wasn't found", 404)
+        piece, variant = found
         fmt = formats.get(piece.format)
         if provider not in destinations(fmt):
             raise SocialError(f"A {piece.label} can't go to {NAMES.get(provider, provider)}", 400)
@@ -143,7 +222,8 @@ async def publish_variant(
             Publication(provider=provider, url=posted.url, posted_at=datetime.now(timezone.utc).isoformat(), posts=posted.posts)  # type: ignore[arg-type]
         )
         if text or parts:
-            edited.issues = checks.check(edited, fmt, checks.allowed_figures(result.request), piece.requirements)
+            recheck(result, piece, fmt, variant, edited)
+            edited.edited = True
         piece.variants[piece.variants.index(variant)] = edited
         await supabase_rest.update(
             "agent_requests",

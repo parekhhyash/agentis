@@ -1,11 +1,12 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 
 import { BackendApiError } from '../../lib/backendApi'
 import {
   copyForMedium,
   destinationsFor,
+  linkedinShareUrl,
   publishVariant,
-  requirementsText,
+  saveVariant,
   SHAPES,
   textLength,
   variantAsText,
@@ -17,6 +18,7 @@ import {
   type Publication,
   type SocialProvider,
   type useSocialConnections,
+  type VariantEdits,
 } from '../../lib/content'
 import RichText from './RichText'
 
@@ -52,56 +54,171 @@ function Counter({ value, limit, xCount }: { value: string; limit: number | null
   )
 }
 
-function Field({ label, value, limit }: { label: string; value: string | null; limit?: number }) {
-  if (!value) return null
+type Shape = 'post' | 'thread' | 'article' | 'email' | 'ad'
+
+// The fields an option of each shape has, which the user can change.
+interface Draft {
+  title: string
+  subtitle: string
+  text: string
+  parts: string[]
+  headlines: string[]
+  descriptions: string[]
+  tags: string[]
+}
+
+const FIELDS: Record<Shape, (keyof Draft)[]> = {
+  post: ['text'],
+  thread: ['parts'],
+  article: ['title', 'subtitle', 'text', 'tags'],
+  email: ['title', 'subtitle', 'text'],
+  ad: ['headlines', 'descriptions', 'text'],
+}
+
+function draftOf(v: ContentVariant): Draft {
+  return {
+    title: v.title ?? '',
+    subtitle: v.subtitle ?? '',
+    text: v.text,
+    parts: v.parts,
+    headlines: v.headlines,
+    descriptions: v.descriptions,
+    tags: v.tags ?? [],
+  }
+}
+
+// Only the fields the user changed, for the save request.
+function changesIn(shape: Shape, draft: Draft, variant: ContentVariant): VariantEdits {
+  const saved = draftOf(variant)
+  const out: Record<string, string | string[]> = {}
+  for (const key of FIELDS[shape]) {
+    if (JSON.stringify(draft[key]) !== JSON.stringify(saved[key])) out[key] = draft[key]
+  }
+  return out as VariantEdits
+}
+
+// The option as it reads now, edits included, for copying and opening elsewhere.
+function withDraft(variant: ContentVariant, draft: Draft): ContentVariant {
+  return { ...variant, ...draft, title: draft.title || null, subtitle: draft.subtitle || null }
+}
+
+const inputClass =
+  'w-full rounded-lg border border-slate-200 bg-transparent px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-sky-500 focus:outline-none disabled:opacity-70'
+
+// Tall enough for the text, counting wrapped lines, within a range.
+function rowsFor(text: string, min: number, max: number): number {
+  const lines = text.split('\n').reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / 85)), 0)
+  return Math.min(max, Math.max(min, lines + 1))
+}
+
+function Field({ label, aside, children }: { label: ReactNode; aside?: ReactNode; children: ReactNode }) {
+  return (
+    <label className="block">
+      <span className="mb-1 flex items-center justify-between gap-3 text-xs font-medium text-slate-500">
+        <span>{label}</span>
+        {aside}
+      </span>
+      {children}
+    </label>
+  )
+}
+
+function TextBox({ value, onChange, editable, min = 6, max = 18 }: { value: string; onChange: (value: string) => void; editable: boolean; min?: number; max?: number }) {
+  return (
+    <textarea
+      className={`${inputClass} resize-y leading-relaxed`}
+      disabled={!editable}
+      rows={rowsFor(value, min, max)}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    />
+  )
+}
+
+const MAX_TAGS = 5
+
+// Medium's topic tags: shown as a list, removable, with a box to add more.
+function Tags({ tags, editable, onChange }: { tags: string[]; editable: boolean; onChange: (tags: string[]) => void }) {
+  const [entry, setEntry] = useState('')
+  function add() {
+    const tag = entry.replace(/^#/, '').trim()
+    if (tag && tags.length < MAX_TAGS && !tags.some((t) => t.toLowerCase() === tag.toLowerCase())) onChange([...tags, tag])
+    setEntry('')
+  }
   return (
     <div>
-      <p className="flex items-center justify-between text-[11px] font-medium tracking-wide text-slate-400 uppercase">
-        {label}
-        {limit && <Counter value={value} limit={limit} xCount={false} />}
+      <p className="mb-1 text-xs font-medium text-slate-500">
+        Tags <span className="font-normal text-slate-400">· Medium topic tags, added when you publish (up to {MAX_TAGS})</span>
       </p>
-      <p className="text-sm text-slate-800">{value}</p>
+      <ul className="flex flex-wrap items-center gap-1.5">
+        {tags.map((tag) => (
+          <li key={tag} className="flex items-center rounded-full bg-slate-100 py-0.5 pr-1 pl-2.5 text-xs text-slate-700">
+            {tag}
+            {editable ? (
+              <button
+                type="button"
+                aria-label={`Remove the tag ${tag}`}
+                onClick={() => onChange(tags.filter((t) => t !== tag))}
+                className="ml-0.5 rounded-full px-1 text-slate-400 hover:text-slate-700"
+              >
+                ×
+              </button>
+            ) : (
+              <span className="pr-1.5" />
+            )}
+          </li>
+        ))}
+        {editable && tags.length < MAX_TAGS && (
+          <li>
+            <input
+              value={entry}
+              maxLength={25}
+              placeholder="Add a tag"
+              aria-label="Add a tag"
+              onChange={(e) => setEntry(e.target.value)}
+              onBlur={add}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ',') {
+                  e.preventDefault()
+                  add()
+                }
+              }}
+              className="w-28 rounded-full border border-dashed border-slate-300 bg-transparent px-2.5 py-0.5 text-xs text-slate-800 placeholder:text-slate-400 focus:border-sky-500 focus:outline-none"
+            />
+          </li>
+        )}
+      </ul>
     </div>
   )
 }
 
 function Body({
   piece,
-  variant,
-  editing,
   draft,
+  editable,
   onDraft,
 }: {
   piece: ContentPiece
-  variant: ContentVariant
-  editing: boolean
-  draft: { text: string; parts: string[] }
-  onDraft: (draft: { text: string; parts: string[] }) => void
+  draft: Draft
+  editable: boolean
+  onDraft: (patch: Partial<Draft>) => void
 }) {
-  const shape = SHAPES[piece.format] ?? 'post'
-  const box = 'w-full rounded-lg border border-slate-300 bg-surface px-3 py-2 text-sm text-slate-800 focus:border-sky-400 focus:outline-none'
+  const shape: Shape = SHAPES[piece.format] ?? 'post'
+  const [preview, setPreview] = useState(false)
+  const setItem = (key: 'parts' | 'headlines' | 'descriptions', i: number, value: string) =>
+    onDraft({ [key]: draft[key].map((item, j) => (j === i ? value : item)) })
 
   if (shape === 'thread') {
     return (
       <ol className="space-y-2">
         {draft.parts.map((part, i) => (
-          <li key={i} className="rounded-lg border border-slate-200 px-3 py-2">
-            <div className="mb-1 flex items-center justify-between text-[11px] text-slate-400">
-              <span>
-                {i + 1}/{draft.parts.length}
-              </span>
-              <Counter value={part} limit={piece.limit} xCount={piece.x_count} />
-            </div>
-            {editing ? (
-              <textarea
-                value={part}
-                rows={3}
-                onChange={(e) => onDraft({ ...draft, parts: draft.parts.map((p, j) => (j === i ? e.target.value : p)) })}
-                className={box}
-              />
-            ) : (
-              <p className="text-sm whitespace-pre-wrap text-slate-800">{part}</p>
-            )}
+          <li key={i}>
+            <Field
+              label={`Post ${i + 1} of ${draft.parts.length}`}
+              aside={<Counter value={part} limit={piece.limit} xCount={piece.x_count} />}
+            >
+              <TextBox value={part} min={3} max={8} editable={editable} onChange={(v) => setItem('parts', i, v)} />
+            </Field>
           </li>
         ))}
       </ol>
@@ -109,129 +226,200 @@ function Body({
   }
   if (shape === 'ad') {
     return (
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <p className="text-[11px] font-medium tracking-wide text-slate-400 uppercase">Headlines (30 max)</p>
-          {variant.headlines.map((h, i) => (
-            <p key={i} className="flex items-baseline justify-between gap-2 text-sm text-slate-800">
-              <span>{h}</span>
-              <Counter value={h} limit={30} xCount={false} />
-            </p>
-          ))}
+      <div className="space-y-3">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-2">
+            {draft.headlines.map((h, i) => (
+              <Field key={i} label={`Headline ${i + 1}`} aside={<Counter value={h} limit={30} xCount={false} />}>
+                <input className={inputClass} disabled={!editable} value={h} onChange={(e) => setItem('headlines', i, e.target.value)} />
+              </Field>
+            ))}
+          </div>
+          <div className="space-y-2">
+            {draft.descriptions.map((d, i) => (
+              <Field key={i} label={`Description ${i + 1}`} aside={<Counter value={d} limit={90} xCount={false} />}>
+                <TextBox value={d} min={2} max={4} editable={editable} onChange={(v) => setItem('descriptions', i, v)} />
+              </Field>
+            ))}
+          </div>
         </div>
-        <div className="space-y-1.5">
-          <p className="text-[11px] font-medium tracking-wide text-slate-400 uppercase">Descriptions (90 max)</p>
-          {variant.descriptions.map((d, i) => (
-            <p key={i} className="text-sm text-slate-800">
-              {d} <Counter value={d} limit={90} xCount={false} />
-            </p>
-          ))}
-        </div>
-        <div className="sm:col-span-2">
-          <Field label="Primary text" value={variant.text} limit={125} />
-        </div>
+        <Field label="Primary text" aside={<Counter value={draft.text} limit={125} xCount={false} />}>
+          <TextBox value={draft.text} min={3} max={8} editable={editable} onChange={(text) => onDraft({ text })} />
+        </Field>
       </div>
     )
   }
   if (shape === 'article') {
     // Older blog results predate the per-piece labels and limits.
     const subtitleLabel = piece.subtitle_label ?? 'Meta description'
-    const subtitleLimit = piece.subtitle_limit ?? (piece.format === 'blog_post' ? 155 : undefined)
+    const subtitleLimit = piece.subtitle_limit ?? (piece.format === 'blog_post' ? 155 : null)
+    const toggle = 'rounded px-1.5 py-0.5 text-[11px] font-medium'
     return (
-      <div className="space-y-2">
-        <div className="flex items-baseline justify-between gap-3">
-          <h4 className="text-base font-semibold text-slate-900">{variant.title}</h4>
-          {variant.title && piece.title_limit && <Counter value={variant.title} limit={piece.title_limit} xCount={false} />}
-        </div>
-        <Field label={subtitleLabel} value={variant.subtitle} limit={subtitleLimit ?? undefined} />
-        <div className="max-h-96 overflow-y-auto rounded-lg border border-slate-200 px-3 py-2">
-          <RichText text={variant.text} />
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          {variant.tags && variant.tags.length > 0 ? (
-            <ul className="flex flex-wrap gap-1.5">
-              {variant.tags.map((tag) => (
-                <li key={tag} className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
-                  {tag}
-                </li>
-              ))}
-            </ul>
+      <div className="space-y-3">
+        <Field label="Title" aside={<Counter value={draft.title} limit={piece.title_limit ?? null} xCount={false} />}>
+          <input
+            className={`${inputClass} font-semibold`}
+            disabled={!editable}
+            value={draft.title}
+            onChange={(e) => onDraft({ title: e.target.value })}
+          />
+        </Field>
+        <Field label={subtitleLabel} aside={<Counter value={draft.subtitle} limit={subtitleLimit} xCount={false} />}>
+          <input className={inputClass} disabled={!editable} value={draft.subtitle} onChange={(e) => onDraft({ subtitle: e.target.value })} />
+        </Field>
+        <div>
+          <div className="mb-1 flex items-center justify-between gap-3 text-xs font-medium text-slate-500">
+            <span className="flex items-center gap-1">
+              Text
+              <span className="ml-1 flex rounded-md bg-slate-100 p-0.5" role="group" aria-label="Show the text as">
+                <button
+                  type="button"
+                  aria-pressed={!preview}
+                  onClick={() => setPreview(false)}
+                  className={`${toggle} ${!preview ? 'bg-surface text-slate-800 shadow-sm' : 'text-slate-500'}`}
+                >
+                  {editable ? 'Edit' : 'Markdown'}
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={preview}
+                  onClick={() => setPreview(true)}
+                  className={`${toggle} ${preview ? 'bg-surface text-slate-800 shadow-sm' : 'text-slate-500'}`}
+                >
+                  Preview
+                </button>
+              </span>
+            </span>
+            <Words text={draft.text} piece={piece} />
+          </div>
+          {preview ? (
+            <div className="max-h-[32rem] overflow-y-auto rounded-lg border border-slate-200 px-3 py-2">
+              <RichText text={draft.text} />
+            </div>
           ) : (
-            <span />
+            <TextBox value={draft.text} min={10} max={26} editable={editable} onChange={(text) => onDraft({ text })} />
           )}
-          <Words text={variant.text} piece={piece} />
         </div>
+        {piece.format === 'medium_story' && <Tags tags={draft.tags} editable={editable} onChange={(tags) => onDraft({ tags })} />}
       </div>
     )
   }
   if (shape === 'email') {
     return (
-      <div className="space-y-2">
-        <Field label="Subject" value={variant.title} limit={60} />
-        <Field label="Preview" value={variant.subtitle} limit={90} />
-        <p className="rounded-lg border border-slate-200 px-3 py-2 text-sm whitespace-pre-wrap text-slate-800">{variant.text}</p>
+      <div className="space-y-3">
+        <Field label="Subject" aside={<Counter value={draft.title} limit={60} xCount={false} />}>
+          <input className={inputClass} disabled={!editable} value={draft.title} onChange={(e) => onDraft({ title: e.target.value })} />
+        </Field>
+        <Field label="Preview line" aside={<Counter value={draft.subtitle} limit={90} xCount={false} />}>
+          <input className={inputClass} disabled={!editable} value={draft.subtitle} onChange={(e) => onDraft({ subtitle: e.target.value })} />
+        </Field>
+        <Field label="Message">
+          <TextBox value={draft.text} min={8} max={22} editable={editable} onChange={(text) => onDraft({ text })} />
+        </Field>
       </div>
     )
   }
+  const words = Boolean(piece.requirements?.min_words || piece.requirements?.max_words || !piece.limit)
   return (
-    <div>
-      {editing ? (
-        <textarea value={draft.text} rows={8} onChange={(e) => onDraft({ ...draft, text: e.target.value })} className={box} />
-      ) : (
-        <p className="rounded-lg border border-slate-200 px-3 py-2 text-sm whitespace-pre-wrap text-slate-800">{draft.text}</p>
-      )}
-      <div className="mt-1 flex justify-end gap-3">
-        {(piece.requirements?.min_words || piece.requirements?.max_words || !piece.limit) && <Words text={draft.text} piece={piece} />}
-        <Counter value={draft.text} limit={piece.limit} xCount={piece.x_count} />
-      </div>
-    </div>
+    <Field
+      label={piece.format === 'instagram_caption' ? 'Caption' : piece.platform ? 'Post' : 'Text'}
+      aside={
+        <span className="flex gap-3">
+          {words && <Words text={draft.text} piece={piece} />}
+          <Counter value={draft.text} limit={piece.limit} xCount={piece.x_count} />
+        </span>
+      }
+    >
+      <TextBox value={draft.text} editable={editable} onChange={(text) => onDraft({ text })} />
+    </Field>
   )
 }
 
 function PieceCard({
   requestId,
   piece,
+  showLabel,
   social,
   onPieceChange,
   onOpenConnect,
 }: {
   requestId: string
   piece: ContentPiece
+  showLabel: boolean
   social: ReturnType<typeof useSocialConnections>
   onPieceChange: (piece: ContentPiece) => void
   onOpenConnect: () => void
 }) {
   const [selectedId, setSelectedId] = useState(piece.recommended_id ?? piece.variants[0]?.id)
   const variant = piece.variants.find((v) => v.id === selectedId) ?? piece.variants[0]
-  const [drafts, setDrafts] = useState<Record<string, { text: string; parts: string[] }>>({})
-  const [editing, setEditing] = useState(false)
+  // Unsaved edits, per option, so switching options doesn't lose them.
+  const [drafts, setDrafts] = useState<Record<string, Draft>>({})
+  const [saving, setSaving] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState<SocialProvider | null>(null)
   const [message, setMessage] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null)
 
   if (!variant) return null
-  const draft = drafts[variant.id] ?? { text: variant.text, parts: variant.parts }
-  const edited = draft.text !== variant.text || draft.parts.join('\u0000') !== variant.parts.join('\u0000')
+  const shape: Shape = SHAPES[piece.format] ?? 'post'
+  const draft = drafts[variant.id] ?? draftOf(variant)
+  const changes = changesIn(shape, draft, variant)
+  const dirty = Object.keys(changes).length > 0
+  const current = withDraft(variant, draft)
   const places = destinationsFor(piece)
   // The piece's own network (LinkedIn / X) gets the main button and a confirm step.
   const network = places.find((p) => PUBLIC.includes(p)) ?? null
   const status = network ? social.byProvider(network) : null
   const published = network ? variant.published.find((p) => p.provider === network) : undefined
+  // A public post can't change once it's out; private pages and drafts can.
+  const postedPublicly = variant.published.some((p) => PUBLIC.includes(p.provider))
+  const editable = !postedPublicly && !saving && busy === null
   const done = (provider: SocialProvider) => variant.published.some((p) => p.provider === provider)
   const notion = social.byProvider('notion')
   const medium = social.byProvider('medium')
   const mediumStory = piece.format === 'medium_story'
-  const asked = requirementsText(piece.requirements)
   const overLimit =
     piece.limit != null &&
-    (SHAPES[piece.format] === 'thread'
+    (shape === 'thread'
       ? draft.parts.some((p) => textLength(p, piece.x_count) > (piece.limit ?? Infinity))
       : textLength(draft.text, piece.x_count) > piece.limit)
 
-  async function copy() {
-    const text = variantAsText({ ...variant, text: draft.text, parts: draft.parts }, piece.format)
+  function edit(patch: Partial<Draft>) {
+    setDrafts((prev) => ({ ...prev, [variant.id]: { ...draft, ...patch } }))
+    setMessage(null)
+  }
+
+  function undo() {
+    setDrafts((prev) => {
+      const next = { ...prev }
+      delete next[variant.id]
+      return next
+    })
+    setMessage(null)
+  }
+
+  // Saves the edits; the server checks the option again (limits, your
+  // requirements, figures, claims) and returns it with its new score.
+  async function save(): Promise<boolean> {
+    if (!dirty) return true
+    setSaving(true)
+    setMessage(null)
     try {
-      await navigator.clipboard.writeText(text)
+      const updated = await saveVariant(requestId, variant.id, { piece_id: piece.id, ...changes })
+      onPieceChange({ ...piece, variants: piece.variants.map((v) => (v.id === updated.id ? updated : v)) })
+      undo()
+      setMessage({ tone: 'ok', text: 'Saved and checked again' })
+      return true
+    } catch (err) {
+      setMessage({ tone: 'error', text: err instanceof BackendApiError ? err.message : 'Saving your changes failed' })
+      return false
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(variantAsText(current, piece.format))
       setMessage({ tone: 'ok', text: 'Copied' })
     } catch {
       setMessage({ tone: 'error', text: 'Copy failed; select the text instead' })
@@ -242,15 +430,12 @@ function PieceCard({
     setBusy(provider)
     setMessage(null)
     try {
-      const updated = await publishVariant(requestId, {
-        piece_id: piece.id,
-        variant_id: variant.id,
-        provider,
-        ...(edited ? (SHAPES[piece.format] === 'thread' ? { parts: draft.parts } : { text: draft.text }) : {}),
-      })
+      // What gets posted or saved is what the user sees: save edits first.
+      if (dirty && !(await save())) return
+      const updated = await publishVariant(requestId, { piece_id: piece.id, variant_id: variant.id, provider })
       onPieceChange({ ...piece, variants: piece.variants.map((v) => (v.id === updated.id ? updated : v)) })
-      setEditing(false)
       setConfirming(false)
+      setMessage(null)
     } catch (err) {
       const fallback = PUBLIC.includes(provider) ? 'Posting failed' : `Saving to ${NETWORK[provider]} failed`
       setMessage({ tone: 'error', text: err instanceof BackendApiError ? err.message : fallback })
@@ -263,7 +448,7 @@ function PieceCard({
   // Without X's paid API, X opens with the post (or a thread's first post)
   // filled in; the whole thread goes to the clipboard for the rest.
   async function openInX() {
-    const thread = SHAPES[piece.format] === 'thread'
+    const thread = shape === 'thread'
     window.open(xIntentUrl(thread ? (draft.parts[0] ?? '') : draft.text), '_blank', 'noopener')
     if (thread && draft.parts.length > 1) {
       try {
@@ -275,24 +460,39 @@ function PieceCard({
     }
   }
 
+  // Without a LinkedIn connection: the post box opens with the text, and the
+  // text is copied too in case LinkedIn leaves the box empty.
+  async function openInLinkedIn() {
+    window.open(linkedinShareUrl(draft.text), '_blank', 'noopener')
+    try {
+      await navigator.clipboard.writeText(draft.text)
+      setMessage({ tone: 'ok', text: 'LinkedIn opened with your post. If the post box is empty, paste: the post is copied.' })
+    } catch {
+      setMessage({ tone: 'ok', text: 'LinkedIn opened with your post. If the post box is empty, use Copy and paste it in.' })
+    }
+  }
+
   async function copyMedium() {
     try {
-      await copyForMedium({ ...variant, text: draft.text }, piece.format)
-      setMessage({ tone: 'ok', text: 'Copied with formatting. Paste it into a new Medium story.' })
+      await copyForMedium(current, piece.format)
+      setMessage({
+        tone: 'ok',
+        text: `Copied with formatting. Paste it into a new Medium story${current.tags?.length ? ', then add the tags when you publish' : ''}.`,
+      })
     } catch {
       setMessage({ tone: 'error', text: 'Copy failed; select the text instead' })
     }
   }
 
   const secondary = 'rounded-full border border-slate-300 px-3 py-1 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50'
+  const primary = 'rounded-full bg-brand-blue px-3.5 py-1 text-sm font-semibold text-white hover:bg-brand-blue/90 disabled:opacity-50'
+  const scored = Object.keys(variant.scores).length > 0
+  const tabNote = (v: ContentVariant) =>
+    drafts[v.id] && Object.keys(changesIn(shape, drafts[v.id], v)).length > 0 ? 'Unsaved' : v.edited ? 'Edited' : ''
 
   return (
     <section className="rounded-xl border border-slate-200 bg-surface p-4">
-      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <h4 className="text-sm font-semibold text-slate-900">{piece.label}</h4>
-        {piece.topic && <span className="min-w-0 truncate text-xs text-slate-500">{piece.topic}</span>}
-        {asked && <p className="w-full text-xs text-slate-500">You asked for: {asked}</p>}
-      </div>
+      {showLabel && <h4 className="mb-3 text-sm font-semibold text-slate-900">{piece.label}</h4>}
 
       {piece.variants.length > 1 && (
         <div role="tablist" className="mb-3 flex flex-wrap gap-1.5">
@@ -304,7 +504,6 @@ function PieceCard({
               aria-selected={v.id === variant.id}
               onClick={() => {
                 setSelectedId(v.id)
-                setEditing(false)
                 setConfirming(false)
                 setMessage(null)
               }}
@@ -315,13 +514,27 @@ function PieceCard({
               <span className="font-semibold">Option {i + 1}</span>
               {v.score != null && <span className="ml-1 tabular-nums text-slate-500">{v.score.toFixed(1)}</span>}
               {v.id === piece.recommended_id && <span className="ml-1.5 font-semibold text-brand-blue">Recommended</span>}
-              {v.angle && <span className="block text-[11px] text-slate-400">{v.angle}</span>}
+              {(v.angle || tabNote(v)) && (
+                <span className="block text-[11px] text-slate-400">{[v.angle, tabNote(v)].filter(Boolean).join(' · ')}</span>
+              )}
             </button>
           ))}
         </div>
       )}
 
-      <Body piece={piece} variant={variant} editing={editing} draft={draft} onDraft={(d) => setDrafts((prev) => ({ ...prev, [variant.id]: d }))} />
+      <Body key={variant.id} piece={piece} draft={draft} editable={editable} onDraft={edit} />
+
+      {dirty && (
+        <div className="mt-2 flex flex-wrap items-center justify-end gap-2 text-sm">
+          <span className="mr-auto text-xs text-slate-500">Unsaved changes</span>
+          <button type="button" disabled={saving} onClick={undo} className="rounded-full px-3 py-1 text-slate-500 hover:bg-slate-100 disabled:opacity-50">
+            Undo
+          </button>
+          <button type="button" disabled={saving || busy !== null} onClick={() => void save()} className={primary}>
+            {saving ? 'Saving…' : 'Save changes'}
+          </button>
+        </div>
+      )}
 
       {variant.issues.length > 0 && (
         <ul className="mt-2 flex flex-wrap gap-1.5">
@@ -336,14 +549,15 @@ function PieceCard({
         </ul>
       )}
 
-      {(variant.reason || Object.keys(variant.scores).length > 0) && (
+      {(variant.reason || scored) && (
         <p className="mt-2 text-xs text-slate-500">
           {variant.reason}
-          {Object.keys(variant.scores).length > 0 && (
+          {scored && (
             <span className="ml-1 text-slate-400">
               ({CRITERIA.filter((c) => c in variant.scores).map((c) => `${c} ${variant.scores[c]}`).join(' · ')})
             </span>
           )}
+          {variant.edited && scored && <span className="ml-1 text-slate-400">Scored before your edits.</span>}
         </p>
       )}
 
@@ -351,11 +565,6 @@ function PieceCard({
         <button type="button" onClick={() => void copy()} className={secondary}>
           Copy
         </button>
-        {(SHAPES[piece.format] === 'post' || SHAPES[piece.format] === 'thread') && !published && (
-          <button type="button" onClick={() => setEditing((v) => !v)} className={secondary}>
-            {editing ? 'Done editing' : 'Edit'}
-          </button>
-        )}
         {mediumStory && !medium?.connected && (
           <>
             <button type="button" onClick={() => void copyMedium()} className={secondary}>
@@ -371,7 +580,7 @@ function PieceCard({
           {notion?.configured && !done('notion') && (
             <button
               type="button"
-              disabled={busy !== null}
+              disabled={busy !== null || saving}
               onClick={() => (notion.connected ? void publish('notion') : onOpenConnect())}
               title={notion.connected ? `Save as a private page in ${notion.account ?? 'Notion'}` : 'Connect Notion first'}
               className={secondary}
@@ -380,52 +589,51 @@ function PieceCard({
             </button>
           )}
           {places.includes('medium') && medium?.connected && !done('medium') && (
-            <button type="button" disabled={busy !== null} onClick={() => void publish('medium')} className={secondary}>
+            <button type="button" disabled={busy !== null || saving} onClick={() => void publish('medium')} className={secondary}>
               {busy === 'medium' ? 'Saving…' : 'Save Medium draft'}
             </button>
           )}
           {network &&
             !published &&
-            (!status?.configured && network === 'x' ? (
-              <button
-                type="button"
-                disabled={overLimit}
-                title={overLimit ? 'Shorten it to fit the limit first' : 'Opens X with this post ready; you press Post'}
-                onClick={() => void openInX()}
-                className="rounded-full bg-ink px-3.5 py-1 text-sm font-semibold text-white hover:bg-ink/90 disabled:opacity-50 dark:bg-white dark:text-ink"
-              >
-                Open in X
-              </button>
-            ) : !status?.configured ? (
-              <span className="text-xs text-slate-400">{NETWORK[network]} posting isn&rsquo;t set up on the server</span>
-            ) : !status.connected ? (
-              <button type="button" onClick={onOpenConnect} className="text-sm font-medium text-sky-600 hover:underline">
-                Connect {NETWORK[network]} to post
-              </button>
+            (!status?.connected ? (
+              // Not connected (or the server has no app for it): open the
+              // network with the post ready, and the user presses Post there.
+              <>
+                {status?.configured && (
+                  <button type="button" onClick={onOpenConnect} className="text-sm font-medium text-sky-600 hover:underline">
+                    Connect {NETWORK[network]} to post from here
+                  </button>
+                )}
+                <button
+                  type="button"
+                  disabled={overLimit}
+                  title={overLimit ? 'Shorten it to fit the limit first' : `Opens ${NETWORK[network]} with this post ready; you press Post`}
+                  onClick={() => void (network === 'x' ? openInX() : openInLinkedIn())}
+                  className="rounded-full bg-ink px-3.5 py-1 text-sm font-semibold text-white hover:bg-ink/90 disabled:opacity-50 dark:bg-white dark:text-ink"
+                >
+                  Open in {NETWORK[network]}
+                </button>
+              </>
             ) : confirming ? (
               <span className="flex flex-wrap items-center gap-2 text-sm">
                 <span className="text-slate-600">
                   Post publicly as {status.account}?{network === 'x' ? ' Uses X API credits.' : ''}
+                  {dirty ? ' Your changes are saved first.' : ''}
                 </span>
                 <button type="button" onClick={() => setConfirming(false)} className="rounded-full px-3 py-1 text-slate-500 hover:bg-slate-100">
                   Cancel
                 </button>
-                <button
-                  type="button"
-                  disabled={busy !== null}
-                  onClick={() => void publish(network)}
-                  className="rounded-full bg-brand-blue px-3.5 py-1 font-semibold text-white hover:bg-brand-blue/90 disabled:opacity-50"
-                >
+                <button type="button" disabled={busy !== null || saving} onClick={() => void publish(network)} className={primary}>
                   {busy === network ? 'Posting…' : 'Post now'}
                 </button>
               </span>
             ) : (
               <button
                 type="button"
-                disabled={overLimit || busy !== null}
+                disabled={overLimit || busy !== null || saving}
                 title={overLimit ? 'Shorten it to fit the limit first' : undefined}
                 onClick={() => setConfirming(true)}
-                className="rounded-full bg-brand-blue px-3.5 py-1 text-sm font-semibold text-white hover:bg-brand-blue/90 disabled:opacity-50"
+                className={primary}
               >
                 Post to {NETWORK[network]}
               </button>
@@ -469,6 +677,7 @@ export default function ContentResultPanel({
           key={piece.id}
           requestId={requestId}
           piece={piece}
+          showLabel={result.pieces.length > 1}
           social={social}
           onOpenConnect={onOpenConnect}
           onPieceChange={(updated) => onResultChange({ ...result, pieces: result.pieces.map((p) => (p.id === updated.id ? updated : p)) })}

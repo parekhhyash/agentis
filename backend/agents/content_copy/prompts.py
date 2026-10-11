@@ -59,6 +59,9 @@ Rules:
 (no "delve", "game-changer", "unlock", "elevate", "seamless", "in today's fast-paced world").
 - Use only the facts provided. Never invent numbers, results, customers, quotes or links. If a figure \
 would help but none was given, write around it.
+- Describe the company's product only with what THEIR COMPANY and the facts say. Don't add features, \
+integrations, channels, languages, response times, prices, customers or results they don't mention. If a \
+detail would help but isn't given, write about the reader's problem and the outcome instead.
 - No placeholders like [Name] or [link]. No em dashes; use commas, colons or full stops.
 - Match the company: its product, audience and location.
 
@@ -96,10 +99,21 @@ JUDGE_SYSTEM = """You are a strict content editor. Score each option for the bri
 - cta: is the next step clear and fitting for the goal?
 Be critical: 7 is good, 9 is exceptional. Give one short sentence on the option's main strength or flaw.
 
+Also list as "unsupported" every claim about the company's own product or service (a feature, \
+integration, channel, language, response time, price, customer or result) that THEIR COMPANY and the \
+FACTS don't back up, quoted word for word from the option, a short phrase each. Claims about the \
+reader's problems or the market aren't about the company; leave them out. An empty list if there are none.
+
 Return only JSON: {"scores": [{"id": "<option id>", "hook": n, "clarity": n, "specificity": n, \
-"voice": n, "cta": n, "reason": "..."}]}"""
+"voice": n, "cta": n, "reason": "...", "unsupported": ["..."]}]}"""
 
 JUDGE_USER = """FORMAT: {label}
+THEIR COMPANY:
+{company}
+
+FACTS THE USER GAVE:
+{facts}
+
 BRIEF:
 {brief}
 

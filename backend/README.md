@@ -106,9 +106,20 @@ Request (+ company profile, earlier turns)
                 errors; hashtags, cliches, em dashes, figures not in the
                 request and paid X links are warnings
   -> Repair     options with errors go back once with the exact problems
-  -> Judge      hook/clarity/specificity/voice/cta, minus 3 per error and up
-                to 2 for warnings; recommended = best option with no errors
+  -> Judge      hook/clarity/specificity/voice/cta, plus quotes of claims
+                about the company its profile doesn't back (kept only if the
+                option really says them); minus 3 per error, 1 per claim (up
+                to 3) and 0.5 per other warning (up to 2); recommended = best
+                option with no errors
 ```
+
+Edits (`PATCH /content/requests/{id}/variants/{variant_id}`): the fields the
+option's shape has (`services/content_runner.EDITABLE`) are replaced, the code
+checks run again against `ContentResult.allowed_figures` (the figures the
+original was checked with), flagged claims the edit no longer makes are
+dropped, and the score becomes the editor's original scores minus the new
+penalties; the option is marked `edited`. Options already posted on LinkedIn
+or X can't be edited.
 
 Posting (`POST /content/requests/{id}/publish`): the chosen option, with the
 user's edits, is checked again and posted as the user, once per network.

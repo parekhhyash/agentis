@@ -184,7 +184,30 @@ def check(variant: Variant, fmt: Format, allowed: set[str], req: Requirements | 
     return issues
 
 
+def _plain(text: str) -> str:
+    return " ".join(re.sub(r"[^\w\s]", " ", (text or "").replace("’", "'").replace("'", "")).lower().split())
+
+
+def claim_issue(variant: Variant, quote: str) -> Issue | None:
+    """A claim the editor says the company profile doesn't back, kept only if
+    the draft really says it (the editor can misquote)."""
+    quote = " ".join(str(quote).split()).strip(" \"'“”‘’")
+    if len(_plain(quote)) < 6 or _plain(quote) not in _plain(all_text(variant)):
+        return None
+    short = quote if len(quote) <= 90 else quote[:87].rstrip(" ,.;:") + "…"
+    return Issue(level="warning", message=f"Not in your company profile: \"{short}\"", quote=quote)
+
+
+def claims_kept(issues: list[Issue], variant: Variant) -> list[Issue]:
+    """After an edit: the flagged claims the draft still makes."""
+    text = _plain(all_text(variant))
+    return [i for i in issues if i.quote and _plain(i.quote) in text]
+
+
 def penalty(issues: list[Issue]) -> float:
+    """3 per broken rule; 1 per claim the company profile doesn't back (up to
+    3); 0.5 per other warning (up to 2)."""
     errors = sum(1 for i in issues if i.level == "error")
-    warnings = sum(1 for i in issues if i.level == "warning")
-    return 3.0 * errors + min(2.0, 0.5 * warnings)
+    claims = sum(1 for i in issues if i.level == "warning" and i.quote)
+    warnings = sum(1 for i in issues if i.level == "warning" and not i.quote)
+    return 3.0 * errors + min(3.0, 1.0 * claims) + min(2.0, 0.5 * warnings)
