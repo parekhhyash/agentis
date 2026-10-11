@@ -106,65 +106,68 @@ export default function ConnectorOrbit() {
   let n = 0
   return (
     <section id="integrations" className="relative z-10 overflow-x-clip px-4 py-24 sm:px-6 sm:py-32">
-      <div className="mx-auto max-w-2xl text-center">
-        <span className="text-sm font-semibold tracking-[0.2em] text-brand-blue uppercase">Integrations</span>
-        <h2 className="font-display mt-4 text-4xl text-slate-900 sm:text-5xl">Your tools, one team of agents</h2>
-        <p className="mt-5 text-lg leading-relaxed text-slate-600">
-          Connect Gmail, Sheets, your CRM and your social accounts once. Every agent can then read, draft and act in
-          them, and nothing goes out until you approve it.
-        </p>
-      </div>
+      {/* Stacked and centred on smaller screens; text left, orbit right on laptops. */}
+      <div className="mx-auto grid max-w-[78rem] items-center gap-10 sm:gap-14 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-8 min-[1680px]:max-w-[86rem]">
+        <div className="mx-auto max-w-2xl text-center lg:mx-0 lg:max-w-md lg:text-left">
+          <span className="text-sm font-semibold tracking-[0.2em] text-brand-blue uppercase">Integrations</span>
+          <h2 className="font-display mt-4 text-4xl text-slate-900 sm:text-5xl">Your tools, one team of agents</h2>
+          <p className="mt-5 text-lg leading-relaxed text-slate-600">
+            Connect Gmail, Sheets, your CRM and your social accounts once. Every agent can then read, draft and act in
+            them, and nothing goes out until you approve it.
+          </p>
+        </div>
 
-      <div ref={stageRef} aria-hidden="true" className="relative mx-auto mt-10 h-[20rem] max-w-5xl sm:mt-14 sm:h-[28rem]">
-        <svg className="absolute inset-0 h-full w-full overflow-visible">
+        <div ref={stageRef} aria-hidden="true" className="relative mx-auto h-[20rem] w-full max-w-5xl sm:h-[28rem] lg:h-[30rem]">
+          <svg className="absolute inset-0 h-full w-full overflow-visible">
+            {size.w > 0 &&
+              rings.map((ring, i) => (
+                <ellipse
+                  key={i}
+                  cx={size.w / 2}
+                  cy={size.h / 2}
+                  rx={ring.rx}
+                  ry={ring.ry}
+                  transform={`rotate(${(TILT * 180) / Math.PI} ${size.w / 2} ${size.h / 2})`}
+                  fill="none"
+                  strokeWidth="1.5"
+                  strokeDasharray="2 8"
+                  strokeLinecap="round"
+                  className="stroke-slate-300"
+                />
+              ))}
+          </svg>
+
+          {/* The Agentis mark, between the two halves of the rings. */}
+          <span className="absolute top-1/2 left-1/2 z-20 flex h-20 w-20 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-surface shadow-lg ring-1 ring-slate-200 sm:h-28 sm:w-28">
+            <span className="absolute -inset-3 rounded-full bg-brand-blue/10 sm:-inset-4" />
+            <span className="absolute -inset-6 rounded-full bg-brand-blue/5 sm:-inset-9" />
+            <span className="absolute inset-0 animate-ping rounded-full bg-brand-blue/15 [animation-duration:2.4s] motion-reduce:animate-none" />
+            <span className="absolute inset-0 rounded-full bg-surface ring-1 ring-slate-200" />
+            <span className="font-display relative text-4xl leading-none text-slate-900 sm:text-6xl">A</span>
+          </span>
+
           {size.w > 0 &&
-            rings.map((ring, i) => (
-              <ellipse
-                key={i}
-                cx={size.w / 2}
-                cy={size.h / 2}
-                rx={ring.rx}
-                ry={ring.ry}
-                transform={`rotate(${(TILT * 180) / Math.PI} ${size.w / 2} ${size.h / 2})`}
-                fill="none"
-                strokeWidth="1.5"
-                strokeDasharray="2 8"
-                strokeLinecap="round"
-                className="stroke-slate-300"
-              />
-            ))}
-        </svg>
-
-        {/* The Agentis mark, between the two halves of the rings. */}
-        <span className="absolute top-1/2 left-1/2 z-20 flex h-20 w-20 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-surface shadow-lg ring-1 ring-slate-200 sm:h-28 sm:w-28">
-          <span className="absolute -inset-3 rounded-full bg-brand-blue/10 sm:-inset-4" />
-          <span className="absolute -inset-6 rounded-full bg-brand-blue/5 sm:-inset-9" />
-          <span className="absolute inset-0 animate-ping rounded-full bg-brand-blue/15 [animation-duration:2.4s] motion-reduce:animate-none" />
-          <span className="absolute inset-0 rounded-full bg-surface ring-1 ring-slate-200" />
-          <span className="font-display relative text-4xl leading-none text-slate-900 sm:text-6xl">A</span>
-        </span>
-
-        {size.w > 0 &&
-          rings.flatMap((ring) =>
-            ring.logos.map((logo) => {
-              const index = n++
-              return (
-                <span
-                  key={`${logo.name}-${index}`}
-                  ref={(el) => {
-                    itemsRef.current[index] = el
-                  }}
-                  className="absolute top-1/2 left-1/2 flex h-8 w-10 items-center justify-center will-change-transform sm:h-12 sm:w-14"
-                >
-                  <img
-                    src={logo.src}
-                    alt=""
-                    className={`max-h-full object-contain ${logo.wide ? 'w-full' : 'h-7 w-7 sm:h-10 sm:w-10'} ${logo.mono ? 'dark:invert' : ''}`}
-                  />
-                </span>
-              )
-            }),
-          )}
+            rings.flatMap((ring) =>
+              ring.logos.map((logo) => {
+                const index = n++
+                return (
+                  <span
+                    key={`${logo.name}-${index}`}
+                    ref={(el) => {
+                      itemsRef.current[index] = el
+                    }}
+                    className="absolute top-1/2 left-1/2 flex h-8 w-10 items-center justify-center will-change-transform sm:h-12 sm:w-14"
+                  >
+                    <img
+                      src={logo.src}
+                      alt=""
+                      className={`max-h-full object-contain ${logo.wide ? 'w-full' : 'h-7 w-7 sm:h-10 sm:w-10'} ${logo.mono ? 'dark:invert' : ''}`}
+                    />
+                  </span>
+                )
+              }),
+            )}
+        </div>
       </div>
       <p className="sr-only">Works with {LOGOS.map((l) => l.name).join(', ')}.</p>
     </section>

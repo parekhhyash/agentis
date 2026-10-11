@@ -15,8 +15,8 @@ export default function LandingPage() {
       <About />
       <ScrollReveal />
       <Features />
-      <HowItWorks />
       <ConnectorOrbit />
+      <HowItWorks />
       <QuoteCircles />
       <Testimonials />
       <CTA />
