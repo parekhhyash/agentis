@@ -60,7 +60,9 @@ General decides a message is about the CRM (route "crm")
                 the official MCP SDK); HubSpot/Salesforce with a fresh OAuth
                 token (refreshed and retried once if rejected), Zoho by URL
   -> Tools      tools/list, each classified read / write / blocked (delete,
-                merge: never offered)
+                merge: never offered); writes whose arguments ask to delete,
+                merge or archive are refused when drafted and when run
+                (mcp/client.destructive_arguments)
   -> Loop       up to 6 model turns, <= 3 read calls each, 8 in total; every
                 call's arguments checked against the tool's JSON Schema;
                 results fenced as untrusted data

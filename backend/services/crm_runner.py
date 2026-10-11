@@ -13,7 +13,7 @@ from agents.lead_research.llm import build_llm_client
 from config.settings import get_settings
 from integrations.crm.connections import connected_providers, open_crm
 from integrations.crm.providers import NAMES, CrmError
-from integrations.mcp.client import McpConnection, McpError
+from integrations.mcp.client import McpConnection, McpError, destructive_arguments
 from services import supabase_rest
 from services.auth import AuthUser
 from services.progress_reporter import ProgressTracker
@@ -102,6 +102,8 @@ async def _execute(user: AuthUser, action: CrmAction) -> CrmAction:
             tool = await connection.tool(action.tool)
             if tool is None or tool.kind != "write":
                 raise CrmError(f"{NAMES[action.provider]} no longer offers this change", 409)
+            if destructive_arguments(action.arguments):
+                raise CrmError("Deleting, merging or archiving records isn't allowed from Agentis", 409)
             problem = check_arguments(tool, action.arguments)
             if problem:
                 raise CrmError(f"The change no longer fits {NAMES[action.provider]}'s tool: {problem}", 409)

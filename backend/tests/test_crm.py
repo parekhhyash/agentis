@@ -427,3 +427,41 @@ def test_hubspot_endpoints_come_from_its_metadata_when_on_hubspot_hosts(monkeypa
     assert second.authorize_url == third.authorize_url == "https://mcp.hubspot.com/oauth/authorize/user"
     salesforce = oauth_provider("salesforce", settings())
     assert asyncio.run(oauth.with_server_endpoints(salesforce, None)) is salesforce  # type: ignore[arg-type]
+
+
+# --- one "manage" tool for every change: deletes still never go through ----------
+
+@pytest.mark.parametrize("arguments,blocked", [
+    ({"objectType": "contacts", "operation": "update", "properties": {"note": "please remove me"}}, False),
+    ({"objectType": "contacts", "operation": "DELETE", "ids": ["1"]}, True),
+    ({"requests": [{"action": "archive", "id": "9"}]}, True),
+    ({"delete": {"ids": ["1"]}}, True),
+    ({"changeType": "merge", "primary": "1", "secondary": "2"}, True),
+    ({"objectType": "deals", "properties": {"type": "Remove old pipeline stage", "delete_after": "no"}}, False),
+    ({"requests": [{"properties": {"name": "x"}, "operation": "archive"}]}, True),
+    ({"objectType": "deals", "properties": {"dealname": "Archive project", "amount": 10}}, False),
+])
+def test_writes_that_ask_to_delete_merge_or_archive_are_refused(arguments, blocked):
+    from integrations.mcp.client import destructive_arguments
+
+    assert (destructive_arguments(arguments) is not None) is blocked
+
+
+def test_crm_agent_leaves_out_a_delete_hidden_in_a_manage_tool():
+    from agents.crm.agent import CrmAgent
+    from agents.crm.schemas import CrmResult
+    from integrations.mcp.client import McpTool
+
+    manage = McpTool(name="manage_crm_objects", description="Create or update records", input_schema={"type": "object"}, kind="write")
+    result = CrmResult(providers=["hubspot"])
+    agent = CrmAgent(ScriptedLLM())
+    drafted = agent._action(
+        {"provider": "hubspot", "tool": "manage_crm_objects", "arguments": {"operation": "delete", "ids": ["1"]}, "summary": "Delete Acme"},
+        {("hubspot", "manage_crm_objects"): manage}, result,
+    )
+    assert drafted is None and "isn't allowed" in result.notes[0]
+    kept = agent._action(
+        {"provider": "hubspot", "tool": "manage_crm_objects", "arguments": {"operation": "create", "properties": {"name": "Acme"}}, "summary": "Add Acme"},
+        {("hubspot", "manage_crm_objects"): manage}, result,
+    )
+    assert kept is not None and kept.tool == "manage_crm_objects"

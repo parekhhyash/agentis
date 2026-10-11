@@ -373,7 +373,9 @@ Message about the CRM ("what's the status of the Acme deal?", "add these leads t
 ├──────────────────────────────────────────────────────────────────┤
 │ 2. Discover tools      tools/list; each tool classified:         │
 │    read (runs on its own) · write (needs approval) ·             │
-│    blocked (delete/merge, never offered)                         │
+│    blocked (delete/merge, never offered). A write whose          │
+│    arguments ask to delete, merge or archive (one "manage"       │
+│    tool for every change, like HubSpot's) is refused too         │
 ├──────────────────────────────────────────────────────────────────┤
 │ 3. Look up (loop)      The model asks for up to 3 read calls per │
 │    turn (8 in total); arguments are validated against each       │

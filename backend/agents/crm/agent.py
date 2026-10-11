@@ -20,7 +20,7 @@ import jsonschema
 from agents.crm import prompts
 from agents.crm.schemas import CrmAction, CrmCall, CrmResult, SignIn
 from agents.lead_research.llm import LLMClient
-from integrations.mcp.client import McpConnection, McpError, McpTool
+from integrations.mcp.client import McpConnection, McpError, McpTool, destructive_arguments
 
 logger = logging.getLogger(__name__)
 
@@ -178,6 +178,10 @@ class CrmAgent:
         if tool.kind == "read":
             return None  # nothing to approve
         arguments = raw.get("arguments") if isinstance(raw.get("arguments"), dict) else {}
+        destructive = destructive_arguments(arguments)
+        if destructive:
+            result.notes.append(f"Left out \"{summary}\": {destructive}, which isn't allowed from Agentis.")
+            return None
         problem = check_arguments(tool, arguments)
         if problem:
             result.notes.append(f"Left out \"{summary}\": {problem}")

@@ -93,6 +93,38 @@ def classify(tool: Tool) -> ToolKind:
     return "read" if words & _READ_WORDS else "write"
 
 
+# Argument keys that name what a general "manage" tool should do.
+_OPERATION_KEYS = {"operation", "operations", "action", "actions", "op", "method", "mode", "type", "kind", "intent", "changetype"}
+
+
+def destructive_arguments(arguments: Any) -> str | None:
+    """Why a write's arguments ask to delete, merge or archive records, or
+    None. Some servers have one tool for every change (HubSpot's
+    manage_crm_objects), so the tool's name alone can't keep deletes out."""
+
+    def walk(value: Any, key: str = "", fields: bool = False) -> str | None:
+        if isinstance(value, dict):
+            for k, v in value.items():
+                if not fields and _words(str(k)) & _BLOCKED_WORDS:
+                    return f"it asks to {next(iter(_words(str(k)) & _BLOCKED_WORDS))} records"
+                # A record's own fields ("properties") are data, like a deal type.
+                found = walk(v, str(k), fields or str(k).lower() in ("properties", "fields", "values", "data"))
+                if found:
+                    return found
+        elif isinstance(value, list):
+            for item in value:
+                found = walk(item, key, fields)
+                if found:
+                    return found
+        elif isinstance(value, str) and not fields and key.lower().replace("_", "") in _OPERATION_KEYS:
+            hit = _words(value) & _BLOCKED_WORDS
+            if hit:
+                return f"it asks to {next(iter(hit))} records"
+        return None
+
+    return walk(arguments)
+
+
 def _to_tool(tool: Tool) -> McpTool:
     return McpTool(
         name=tool.name,
