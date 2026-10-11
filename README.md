@@ -644,7 +644,7 @@ Run `supabase/migrations/20261010000000_crm_connections.sql` and `20261014000000
 2. Redirect URL: the CRM callback above (exact match).
 3. Set `HUBSPOT_MCP_CLIENT_ID` and `HUBSPOT_MCP_CLIENT_SECRET` on the backend.
 
-Agentis reads HubSpot's sign-in and token endpoints from `https://mcp.hubspot.com/.well-known/oauth-authorization-server` (only if they're on HubSpot's own hosts), falling back to `HUBSPOT_MCP_AUTHORIZE_URL` / `HUBSPOT_MCP_TOKEN_URL`. Which tools a connection gets is up to HubSpot; Agentis offers whatever its server lists (writes still need approval).
+Agentis reads HubSpot's sign-in and token endpoints from `https://mcp.hubspot.com/.well-known/oauth-authorization-server` (only if they're on HubSpot's own hosts), falling back to `HUBSPOT_MCP_AUTHORIZE_URL` / `HUBSPOT_MCP_TOKEN_URL`. Which tools a connection gets is up to HubSpot; Agentis offers whatever its server lists (writes still need approval). HubSpot's MCP server uses OAuth 2.1 with PKCE and single-use refresh tokens: each refresh returns a new one, so Agentis refreshes a connection one request at a time, saves the new token, and if a refresh is rejected because another request already rotated it, retries with the newer token instead of dropping the connection. Access follows each user's HubSpot permissions, and if an account turns on HubSpot's Sensitive Data setting, activities (calls, emails, meetings, notes, tasks) aren't available through MCP.
 
 **Salesforce** — nothing on the server. The Connect page shows each company's admin these steps and the callback URL (Developer Edition or Enterprise and up):
 1. Setup > **MCP Servers**: activate `sobject-all` (or `sobject-reads` for read only).

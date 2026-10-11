@@ -395,6 +395,10 @@ def test_salesforce_refresh_uses_the_stored_company_app(monkeypatch):
         used.append((config.token_url, config.client_secret))
         return oauth.TokenGrant("fresh", None, 3600, {})
 
+    async def get_row(user_id, provider):
+        return row
+
+    monkeypatch.setattr(connections, "_row", get_row)
     monkeypatch.setattr(connections.oauth, "refresh", refresh)
     token = asyncio.run(connections._access_token("u-sf", "salesforce", row, force=True))
     assert token == "fresh" and used == [("https://acme.my.salesforce.com/services/oauth2/token", "shh")]
@@ -465,3 +469,81 @@ def test_crm_agent_leaves_out_a_delete_hidden_in_a_manage_tool():
         {("hubspot", "manage_crm_objects"): manage}, result,
     )
     assert kept is not None and kept.tool == "manage_crm_objects"
+
+
+
+# --- single-use refresh tokens (HubSpot rotates them on every refresh) ------------
+
+@pytest.fixture
+def rotating(monkeypatch):
+    """A HubSpot connection whose refresh tokens work once each."""
+    monkeypatch.setattr(connections, "get_settings", lambda: settings())
+    monkeypatch.setattr(connections, "_tokens", {})
+    from collections import defaultdict
+
+    monkeypatch.setattr(connections, "_refresh_locks", defaultdict(asyncio.Lock))
+    monkeypatch.setattr(oauth, "_discovered", {"https://mcp.hubspot.com": ("https://mcp.hubspot.com/a", "https://mcp.hubspot.com/t", 9e12)})
+    state: dict[str, Any] = {"row": {"provider": "hubspot", "refresh_token_encrypted": connections._encrypt("r1")}, "valid": {"r1"},
+                             "refreshes": 0, "deleted": False}
+
+    async def get_row(user_id, provider):
+        return None if state["deleted"] else dict(state["row"])
+
+    async def update(table, params, patch):
+        state["row"].update(patch)
+
+    async def delete(user_id, provider):
+        state["deleted"] = True
+
+    async def refresh(config, token, client):
+        state["refreshes"] += 1
+        await asyncio.sleep(0.01)
+        if token not in state["valid"]:
+            raise CrmError("HubSpot sign-in failed: invalid_grant", 401)
+        state["valid"].discard(token)
+        new = f"r{state['refreshes'] + 1}"
+        state["valid"].add(new)
+        return oauth.TokenGrant(f"access-{new}", new, 1800, {})
+
+    monkeypatch.setattr(connections, "_row", get_row)
+    monkeypatch.setattr(connections.supabase_rest, "update", update)
+    monkeypatch.setattr(connections, "delete_connection", delete)
+    monkeypatch.setattr(connections.oauth, "refresh", refresh)
+    return state
+
+
+def test_concurrent_requests_refresh_a_single_use_token_once(rotating):
+    async def go():
+        row = dict(rotating["row"])
+        return await asyncio.gather(*(connections._access_token("u-hub", "hubspot", row, force=False) for _ in range(3)))
+
+    tokens = asyncio.run(go())
+    assert rotating["refreshes"] == 1 and len(set(tokens)) == 1 and not rotating["deleted"]
+    assert connections._decrypt(rotating["row"]["refresh_token_encrypted"], "hubspot") == "r2"
+
+
+def test_a_token_rotated_elsewhere_is_retried_not_taken_as_revoked(rotating):
+    stale = dict(rotating["row"])
+    # Another worker refreshed: r1 is spent and r9 is stored now.
+    rotating["valid"] = {"r9"}
+    rotating["row"]["refresh_token_encrypted"] = connections._encrypt("r9")
+    calls: list[str] = []
+    original = connections._row
+
+    async def first_stale_then_fresh(user_id, provider):
+        calls.append(provider)
+        return stale if len(calls) == 1 else await original(user_id, provider)
+
+    connections._row = first_stale_then_fresh
+    try:
+        token = asyncio.run(connections._access_token("u-hub", "hubspot", stale, force=True))
+    finally:
+        connections._row = original
+    assert token.startswith("access-") and not rotating["deleted"]
+
+
+def test_a_really_revoked_token_drops_the_connection(rotating):
+    rotating["valid"] = set()
+    with pytest.raises(CrmError) as err:
+        asyncio.run(connections._access_token("u-hub", "hubspot", dict(rotating["row"]), force=True))
+    assert err.value.status == 409 and rotating["deleted"]

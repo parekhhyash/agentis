@@ -7,7 +7,9 @@ Zoho's MCP URL (it embeds the server's key). Access tokens live only in
 memory and are refreshed when they expire or are rejected.
 """
 
+import asyncio
 import time
+from collections import defaultdict
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -27,6 +29,8 @@ TABLE = "crm_connections"
 
 # (user_id, provider) -> (access_token, expires_at)
 _tokens: dict[tuple[str, str], tuple[str, float]] = {}
+# One refresh at a time per connection (refresh tokens may be single-use).
+_refresh_locks: defaultdict[tuple[str, str], asyncio.Lock] = defaultdict(asyncio.Lock)
 
 
 @dataclass
@@ -134,28 +138,47 @@ def remember_token(user_id: str, provider: str, grant: oauth.TokenGrant) -> None
 
 
 async def _access_token(user_id: str, provider: str, row: dict[str, Any], force: bool) -> str:
-    cached = _tokens.get((user_id, provider))
-    if cached and not force and cached[1] - 60 > time.time():
-        return cached[0]
-    if not row.get("refresh_token_encrypted"):
-        raise CrmError(f"Reconnect {NAMES[provider]} on the Connect page", 409)
-    config = oauth_provider(provider, get_settings(), app_from_row(provider, row))
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        config = await oauth.with_server_endpoints(config, client)
-        try:
-            grant = await oauth.refresh(config, _decrypt(row["refresh_token_encrypted"], provider), client)
-        except CrmError as exc:
-            if exc.status == 401:  # revoked or expired grant: start over
-                await delete_connection(user_id, provider)
-                raise CrmError(f"{NAMES[provider]} access expired; connect it again on the Connect page", 409) from exc
-            raise
-    remember_token(user_id, provider, grant)
-    if grant.refresh_token:  # some servers rotate refresh tokens
-        await supabase_rest.update(
-            TABLE,
-            {"user_id": f"eq.{user_id}", "provider": f"eq.{provider}"},
-            {"refresh_token_encrypted": _encrypt(grant.refresh_token), "updated_at": datetime.now(timezone.utc).isoformat()},
-        )
+    """A live access token. Refresh tokens can be single-use (HubSpot's MCP
+    server rotates them on every refresh), so refreshes for one connection
+    run one at a time, and a refresh token that's rejected because another
+    request already rotated it is retried with the newer one rather than
+    taken as a revoked connection."""
+    key = (user_id, provider)
+    before = _tokens.get(key)
+    if before and not force and before[1] - 60 > time.time():
+        return before[0]
+    async with _refresh_locks[key]:
+        now = _tokens.get(key)
+        if now and now is not before and now[1] - 60 > time.time():
+            return now[0]  # refreshed by another request while this one waited
+        row = await _row(user_id, provider) or row
+        for attempt in range(2):
+            if not row.get("refresh_token_encrypted"):
+                raise CrmError(f"Reconnect {NAMES[provider]} on the Connect page", 409)
+            used = row["refresh_token_encrypted"]
+            config = oauth_provider(provider, get_settings(), app_from_row(provider, row))
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                config = await oauth.with_server_endpoints(config, client)
+                try:
+                    grant = await oauth.refresh(config, _decrypt(used, provider), client)
+                    break
+                except CrmError as exc:
+                    if exc.status != 401:
+                        raise
+            # Rejected: rotated elsewhere (another worker) in the meantime, or really revoked.
+            latest = await _row(user_id, provider)
+            if attempt == 0 and latest and latest.get("refresh_token_encrypted") not in (None, used):
+                row = latest
+                continue
+            await delete_connection(user_id, provider)
+            raise CrmError(f"{NAMES[provider]} access expired; connect it again on the Connect page", 409)
+        remember_token(user_id, provider, grant)
+        if grant.refresh_token:  # rotated: the old one no longer works
+            await supabase_rest.update(
+                TABLE,
+                {"user_id": f"eq.{user_id}", "provider": f"eq.{provider}"},
+                {"refresh_token_encrypted": _encrypt(grant.refresh_token), "updated_at": datetime.now(timezone.utc).isoformat()},
+            )
     return grant.access_token
 
 
