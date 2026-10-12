@@ -6,6 +6,7 @@
 // Simple Icons (HubSpot, Google Sheets), both CC0; the marks belong to their
 // owners and are shown only to name the app.
 import gmail from '../assets/connectors/gmail.svg'
+import freshdesk from '../assets/connectors/freshdesk.svg'
 import googleCalendar from '../assets/connectors/google-calendar.svg'
 import googleSheets from '../assets/connectors/google-sheets.svg'
 import hubspot from '../assets/connectors/hubspot.svg'
@@ -16,6 +17,7 @@ import notion from '../assets/connectors/notion.svg'
 import salesforce from '../assets/connectors/salesforce.svg'
 import slack from '../assets/connectors/slack.svg'
 import x from '../assets/connectors/x.svg'
+import zendesk from '../assets/connectors/zendesk.svg'
 import zoho from '../assets/connectors/zoho.svg'
 
 export interface ConnectorInfo {
@@ -35,7 +37,7 @@ export const CONNECTORS: ConnectorInfo[] = [
     id: 'gmail',
     name: 'Gmail',
     description: 'Draft, send and reply to email from your own Gmail, each one after you approve it.',
-    usedBy: 'Sales & Outreach, Operations',
+    usedBy: 'Sales & Outreach, Customer Support, Operations',
     logo: gmail,
     available: true,
   },
@@ -78,6 +80,31 @@ export const CONNECTORS: ConnectorInfo[] = [
     name: 'Zoho CRM',
     description: 'Search and update leads, contacts and deals through your Zoho CRM MCP server (free from Zoho; no Agentis setup).',
     usedBy: 'Manager, Lead Research',
+    logo: zoho,
+    available: true,
+  },
+  {
+    id: 'freshdesk',
+    name: 'Freshdesk',
+    description: 'Triage open tickets and draft replies or private notes from your help articles; you approve each one.',
+    usedBy: 'Customer Support',
+    logo: freshdesk,
+    available: true,
+  },
+  {
+    id: 'zendesk',
+    name: 'Zendesk',
+    description: 'Triage open tickets and draft replies or internal notes from your Help Center; you approve each one.',
+    usedBy: 'Customer Support',
+    logo: zendesk,
+    monochrome: true,
+    available: true,
+  },
+  {
+    id: 'zoho_desk',
+    name: 'Zoho Desk',
+    description: 'Triage open tickets and draft replies or private comments from your knowledge base; you approve each one.',
+    usedBy: 'Customer Support',
     logo: zoho,
     available: true,
   },

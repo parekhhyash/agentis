@@ -108,6 +108,17 @@ class Settings(BaseSettings):
     # Most MCP tool calls one CRM request may make before answering.
     crm_max_tool_calls: int = 8
 
+    # --- Helpdesks (Customer Support) -----------------------------------
+    # Freshdesk and Zendesk need nothing here: each company pastes its own
+    # API key. Zoho Desk: one app in Zoho's API console (Server-based
+    # Application, multi-DC on) whose redirect URI is <backend>/integrations/
+    # support/callback (empty = derived from GOOGLE_OAUTH_REDIRECT_URI).
+    support_oauth_redirect_uri: str | None = None
+    zoho_desk_client_id: str | None = None
+    zoho_desk_client_secret: str | None = None
+    # Most tickets one Customer Support request reads and drafts for.
+    support_max_tickets: int = 8
+
     # --- LinkedIn and X posting (Content & Copy) -------------------------
     # Both send the browser back to <backend>/integrations/social/callback;
     # empty = derived from GOOGLE_OAUTH_REDIRECT_URI.

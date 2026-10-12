@@ -11,7 +11,8 @@ import { CONNECTORS } from '../lib/connectors'
 
 type Orbiter = { src: string; name: string; mono: boolean; wide: boolean }
 
-const LOGOS: Orbiter[] = CONNECTORS.map((c) => ({
+// One of each logo (Zoho CRM and Zoho Desk share Zoho's).
+const LOGOS: Orbiter[] = CONNECTORS.filter((c, i) => CONNECTORS.findIndex((o) => o.logo === c.logo) === i).map((c) => ({
   src: c.logo,
   name: c.name.replace(' (Twitter)', ''),
   mono: Boolean(c.monochrome),

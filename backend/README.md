@@ -194,6 +194,23 @@ Medium has no OAuth for new apps: `POST /integrations/social/medium/token`
 checks a pasted pre-2025 integration token, and articles save as Medium
 drafts. Neither is public, so neither has a confirm step or the limit gate.
 
+## How the Customer Support Agent works
+
+`agents/customer_support/`: a fast planning call picks the source (a connected
+helpdesk before Gmail), the tickets (numbers the user named, or the newest open
+ones, at most `SUPPORT_MAX_TICKETS`), the mode (draft, triage or summarise),
+reply or note, and copies any facts the user gave as guidance. Code fetches the
+tickets and their conversations through `integrations/helpdesk/` (Freshdesk,
+Zendesk, Zoho Desk, or `gmail_inbox.py`, which treats inbox threads waiting on
+a reply as tickets). For each ticket, three at a time, it searches the
+helpdesk's help articles on the subject and makes one call for triage plus a
+reply, or a note for the team when a person is needed. Ticket text goes in as
+untrusted. `checks.py` then flags any link, email address, amount or timeline
+in a reply that the ticket, articles, company profile and guidance don't
+contain. Nothing reaches a customer until the user approves the draft
+(`services/support_runner.decide_ticket`): send the reply, post a private note,
+or set the suggested priority and tags. No endpoint deletes anything.
+
 ## How the Operations Agent works
 
 ```
@@ -257,10 +274,12 @@ backend/
 ├── agents/crm/             # CRM tool loop: reads run, writes drafted for approval
 ├── agents/content_copy/    # formats.py (limits), checks.py, writer + judge in agent.py
 ├── agents/operations/      # schedule.py (format, next run), proposal checks in agent.py
+├── agents/customer_support/ # plan, per-ticket triage + draft, grounding checks
 ├── integrations/mcp/       # MCP client (Streamable HTTP, official SDK), tool classification
 ├── integrations/crm/       # HubSpot/Salesforce/Zoho providers, OAuth + PKCE, connections
 ├── integrations/google/    # OAuth (Gmail, Calendar and Sheets connect separately), encrypted connections, API clients
 ├── integrations/social/    # LinkedIn/X OAuth, encrypted tokens, posting
+├── integrations/helpdesk/  # Freshdesk, Zendesk, Zoho Desk (OAuth) clients, Gmail inbox, connections
 ├── integrations/oauth_common.py  # PKCE + encrypted OAuth state (CRMs, LinkedIn, X)
 ├── agents/lead_research/
 │   ├── agent.py            # orchestrator: stages, stop conditions, progress

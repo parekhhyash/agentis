@@ -7,6 +7,7 @@ import { relativeTime } from '../../lib/relativeTime'
 import { isGeneralResult, type PlanStep } from '../../lib/generalTypes'
 import { isOperationsResult, type ScheduledTasks } from '../../lib/operations'
 import { isOutreachResult, type OutreachAction } from '../../lib/outreachTypes'
+import { isSupportResult } from '../../lib/support'
 import type { AgentProgress, AnyLeadResult } from '../../lib/salesAgentTypes'
 import AgentProgressView from './AgentProgressView'
 import ContentResultPanel from './ContentResultPanel'
@@ -15,6 +16,7 @@ import LeadResultsPanel from './LeadResultsPanel'
 import OperationsResultPanel from './OperationsResultPanel'
 import OutreachResultsPanel from './OutreachResultsPanel'
 import ReportPanel from './report/ReportPanel'
+import SupportResultPanel from './SupportResultPanel'
 import { ClockIcon, SheetIcon } from '../icons'
 
 type AgentRequest = Tables<'agent_requests'>
@@ -38,6 +40,7 @@ export default function ChatConversation({
   onOpenChat,
   onOpenScheduled,
   sheetsConnected = false,
+  senderName,
 }: {
   request: AgentRequest
   handedOff?: boolean
@@ -58,6 +61,8 @@ export default function ChatConversation({
   onOpenScheduled?: () => void
   // Google Sheets is connected: lead and report tables offer "Export to Google Sheets".
   sheetsConnected?: boolean
+  // Signs replies sent from Gmail.
+  senderName?: string | null
 }) {
   const files = attachmentsOf(request.attachments)
   const fileChips = files.length > 0 && (
@@ -159,6 +164,14 @@ export default function ChatConversation({
                 onResultChange={(result) => onResultChange?.(result)}
                 onOpenChat={(id) => onOpenChat?.(id)}
                 onOpenScheduled={() => onOpenScheduled?.()}
+              />
+            ) : isSupportResult(request.result) ? (
+              <SupportResultPanel
+                key={request.id}
+                requestId={request.id}
+                result={request.result}
+                onResultChange={(result) => onResultChange?.(result)}
+                senderName={senderName}
               />
             ) : isDataReport(request.result) ? (
               <ReportPanel result={request.result} sheetsConnected={sheetsConnected} />

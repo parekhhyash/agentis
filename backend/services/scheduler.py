@@ -36,6 +36,7 @@ from services.content_runner import run_content
 from services.conversation_context import AGENT_LABELS, summarize
 from services.data_runner import run_data_report
 from services.general_runner import run_general
+from services.support_runner import run_support
 from services.outreach_runner import run_outreach
 
 logger = logging.getLogger(__name__)
@@ -44,7 +45,7 @@ LOCK_SECONDS = 3600
 MAX_PARALLEL_RUNS = 2
 FAILURES_BEFORE_PAUSE = 3
 CLAIM_BATCH = 5
-HANDOFF_AGENTS = ("lead_research", "sales_outreach", "data_reporting", "content_copy")
+HANDOFF_AGENTS = ("lead_research", "sales_outreach", "data_reporting", "content_copy", "customer_support")
 
 _claiming = asyncio.Lock()
 _slots = asyncio.Semaphore(MAX_PARALLEL_RUNS)
@@ -263,6 +264,8 @@ async def _run_step(
             await run_data_report(user, prompt=step.prompt, request_id=request_id, company_context=company, time_zone=time_zone)
         elif step.agent == "content_copy":
             await run_content(user, prompt=step.prompt, request_id=request_id, company_context=company)
+        elif step.agent == "customer_support":
+            await run_support(user, prompt=step.prompt, request_id=request_id, company_context=company, user_name=user_name)
         else:
             result = await run_general(user, prompt=step.prompt, request_id=request_id, company_context=company, user_name=user_name)
             # General handed the step on, as it does in the chat: to one agent,
@@ -284,7 +287,7 @@ async def _run_step(
 # --- the summary email ----------------------------------------------------------
 
 STATUS_WORDS = {"completed": "done", "partial": "partly done", "failed": "failed"}
-DRAFTING_AGENTS = ("sales_outreach", "content_copy")
+DRAFTING_AGENTS = ("sales_outreach", "content_copy", "customer_support")
 
 
 def summary_email(

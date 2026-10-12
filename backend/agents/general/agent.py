@@ -10,14 +10,14 @@ from agents.crm.schemas import CrmResult
 from agents.general import prompts
 from agents.lead_research.llm import LLMClient
 
-Route = Literal["none", "lead_research", "sales_outreach", "data_reporting", "content_copy", "operations", "crm"]
-ROUTES = ("lead_research", "sales_outreach", "data_reporting", "content_copy", "operations")
+Route = Literal["none", "lead_research", "sales_outreach", "data_reporting", "content_copy", "customer_support", "operations", "crm"]
+ROUTES = ("lead_research", "sales_outreach", "data_reporting", "content_copy", "customer_support", "operations")
 # Agents a message can go through one after another (scheduling stays a
 # single handoff: a schedule can hold steps of its own).
-STEP_ROUTES = ("lead_research", "sales_outreach", "data_reporting", "content_copy", "crm")
+STEP_ROUTES = ("lead_research", "sales_outreach", "data_reporting", "content_copy", "customer_support", "crm")
 MAX_STEPS = 3
 
-StepRoute = Literal["lead_research", "sales_outreach", "data_reporting", "content_copy", "crm"]
+StepRoute = Literal["lead_research", "sales_outreach", "data_reporting", "content_copy", "customer_support", "crm"]
 
 
 class Handoff(BaseModel):

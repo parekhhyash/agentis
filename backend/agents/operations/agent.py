@@ -40,6 +40,7 @@ AGENT_NAMES = {
     "sales_outreach": "Sales & Outreach",
     "data_reporting": "Data & Reporting",
     "content_copy": "Content & Copy",
+    "customer_support": "Customer Support",
 }
 
 

@@ -45,7 +45,7 @@ export const AGENT_TYPES: {
   {
     value: 'customer_support',
     label: 'Customer Support',
-    description: 'Resolve tickets and route the rest to your team.',
+    description: 'Triage tickets and draft replies you approve.',
     icon: HeadsetIcon,
   },
   {

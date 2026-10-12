@@ -4,7 +4,9 @@ import type { Tables } from './database.types'
 
 type AgentRequest = Tables<'agent_requests'>
 
-type Route = Extract<AgentType, 'lead_research' | 'sales_outreach' | 'data_reporting' | 'content_copy' | 'operations'> | 'crm'
+type Route =
+  | Extract<AgentType, 'lead_research' | 'sales_outreach' | 'data_reporting' | 'content_copy' | 'customer_support' | 'operations'>
+  | 'crm'
 
 // One agent a message is handed to. CRM work runs as a General turn.
 export interface Handoff {

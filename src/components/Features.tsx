@@ -117,9 +117,10 @@ function ChatMockup() {
       </div>
       <div className="mt-2 flex justify-end">
         <div className="max-w-[75%] rounded-lg rounded-br-sm bg-brand-blue px-3 py-1.5 text-[11px] text-white shadow-sm">
-          Found it, out for delivery today
+          Sorry for the wait! Here&apos;s how to track it
         </div>
       </div>
+      <p className="mt-1 text-right text-[10px] text-slate-400">Draft, sent when you approve</p>
     </div>
   )
 }
@@ -223,7 +224,7 @@ export default function Features() {
             Customer Support
           </h3>
           <p className="mt-2 text-[15px] leading-relaxed text-slate-600">
-            Resolve common tickets instantly and route the rest to your team.
+            Sort tickets by urgency and draft replies from your help articles. You approve each one; the rest go to your team.
           </p>
           <ChatMockup />
         </div>

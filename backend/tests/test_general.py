@@ -45,7 +45,7 @@ def test_general_routes_with_a_standalone_task_and_rejects_unknown_agents():
     no_task, _ = _run({"route": "sales_outreach", "reply": "On it."}, message="email ravi@beta.io")
     assert no_task.task == "email ravi@beta.io"
 
-    unknown, _ = _run({"route": "customer_support", "reply": "Here's a plan", "task": "x"})
+    unknown, _ = _run({"route": "hr_assistant", "reply": "Here's a plan", "task": "x"})
     assert unknown.route == "none" and unknown.task == ""
 
 
@@ -67,7 +67,7 @@ def test_general_can_plan_several_agents_in_order():
 
     # A step that can't run drops the plan: unknown agents, scheduling, a CRM
     # that isn't connected, or a missing task.
-    for bad in ({"agent": "customer_support", "task": "x"}, {"agent": "operations", "task": "x"}, {"agent": "crm", "task": "x"}, {"agent": "content_copy"}):
+    for bad in ({"agent": "hr_assistant", "task": "x"}, {"agent": "operations", "task": "x"}, {"agent": "crm", "task": "x"}, {"agent": "content_copy"}):
         dropped, _ = _run({"route": "lead_research", "task": "Find leads", "steps": [steps[0], bad], "reply": "ok"})
         assert dropped.steps == [] and dropped.route == "lead_research" and dropped.task == "Find leads"
 

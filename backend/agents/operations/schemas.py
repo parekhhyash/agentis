@@ -5,8 +5,8 @@ from pydantic import BaseModel
 from agents.operations.schedule import Schedule
 
 # Agents a scheduled step can message (Operations itself can't be a step).
-StepAgent = Literal["general", "lead_research", "sales_outreach", "data_reporting", "content_copy"]
-STEP_AGENTS: tuple[str, ...] = ("general", "lead_research", "sales_outreach", "data_reporting", "content_copy")
+StepAgent = Literal["general", "lead_research", "sales_outreach", "data_reporting", "content_copy", "customer_support"]
+STEP_AGENTS: tuple[str, ...] = ("general", "lead_research", "sales_outreach", "data_reporting", "content_copy", "customer_support")
 ProposalAction = Literal["create", "update", "pause", "resume", "delete", "run_now"]
 
 

@@ -26,6 +26,7 @@ import type { Json, Tables } from '../lib/database.types'
 import type { Attachment } from '../lib/dataTypes'
 import { handoffsOf, isGeneralResult, planOf } from '../lib/generalTypes'
 import { useSocialConnections } from '../lib/content'
+import { useSupportConnections } from '../lib/support'
 import { CRM_NAMES, useCrmConnections, type CrmProvider } from '../lib/crm'
 import { useGoogleConnection } from '../lib/googleConnection'
 import { useScheduledTasks } from '../lib/operations'
@@ -75,6 +76,7 @@ export default function DashboardPage() {
   const google = useGoogleConnection(true)
   const crm = useCrmConnections()
   const social = useSocialConnections()
+  const support = useSupportConnections()
   const scheduled = useScheduledTasks()
 
   // Back from Google's consent screen (see api/integrations.py's callback).
@@ -104,6 +106,18 @@ export default function DashboardPage() {
       crmResult === 'connected'
         ? { tone: 'ok', text: `${name} connected. Ask the Manager about your contacts, companies and deals, or to update them.` }
         : { tone: 'error', text: returnMessage ?? `${name} could not be connected.` },
+    )
+  }
+  // Back from Zoho Desk's sign-in page (see api/support.py's callback).
+  const supportResult = searchParams.get('support')
+  const [handledSupportResult, setHandledSupportResult] = useState<string | null>(null)
+  if (supportResult && supportResult !== handledSupportResult) {
+    setHandledSupportResult(supportResult)
+    setView('connect')
+    setNotice(
+      supportResult === 'connected'
+        ? { tone: 'ok', text: 'Zoho Desk connected. Ask Customer Support to triage your open tickets and draft replies.' }
+        : { tone: 'error', text: returnMessage ?? 'Zoho Desk could not be connected.' },
     )
   }
   // Back from LinkedIn's or X's sign-in page (see api/social.py's callback).
@@ -513,7 +527,7 @@ export default function DashboardPage() {
 
         <div ref={scrollRef} className="flex-1 overflow-y-auto [scrollbar-gutter:stable]">
           {view === 'connect' ? (
-            <ConnectionsPanel google={google} crm={crm} social={social} notice={noticeBanner} />
+            <ConnectionsPanel google={google} crm={crm} social={social} support={support} notice={noticeBanner} />
           ) : view === 'scheduled' ? (
             <ScheduledPanel
               scheduled={scheduled}
@@ -545,6 +559,7 @@ export default function DashboardPage() {
                   onOpenChat={(id) => void openChat(id)}
                   onOpenScheduled={openScheduled}
                   sheetsConnected={Boolean(google.status?.sheets)}
+                  senderName={profile?.full_name}
                   onAddLeadsToCrm={(name, count) =>
                     void handleSubmit(
                       `Add the ${count} lead${count === 1 ? '' : 's'} from my last research to ${name}: create each company and its contacts with their emails, and skip any that are already in ${name}.`,

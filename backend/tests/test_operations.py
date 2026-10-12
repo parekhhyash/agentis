@@ -303,6 +303,7 @@ def agents(monkeypatch, db):
     monkeypatch.setattr(scheduler, "run_content", finisher("content_copy"))
     monkeypatch.setattr(scheduler, "run_general", finisher("general"))
     monkeypatch.setattr(scheduler, "run_sales_agent", finisher("lead_research"))
+    monkeypatch.setattr(scheduler, "run_support", finisher("customer_support"))
     return calls, failing
 
 
@@ -382,6 +383,15 @@ def test_general_can_hand_a_step_to_several_agents_in_order(db, agents, monkeypa
     failing.add("lead_research")
     asyncio.run(scheduler.execute(copy.deepcopy(db.tables["scheduled_tasks"][0]), "manual"))
     assert [c[0] for c in calls] == ["lead_research"] and len(general_prompts) == 1
+
+
+def test_a_morning_support_triage_runs_as_a_step(db, agents):
+    calls, _ = agents
+    _add_task(db, [{"agent": "customer_support", "prompt": "Triage new tickets and draft replies"}])
+    asyncio.run(scheduler.execute(copy.deepcopy(db.tables["scheduled_tasks"][0]), "manual"))
+    assert [c[0] for c in calls] == ["customer_support"]
+    assert db.tables["agent_requests"][0]["agent_type"] == "customer_support"
+    assert db.tables["scheduled_tasks"][0]["last_status"] == "completed"
 
 
 def test_a_run_that_breaks_is_still_recorded_and_unlocked(db, agents, monkeypatch):

@@ -211,6 +211,31 @@ export function runContentAgent(
   )
 }
 
+// Customer Support: triages tickets and drafts replies or notes; each one is
+// sent from the results only when the user approves it.
+export function runSupportAgent(
+  requestId: string,
+  prompt: string,
+  options: { companyContext?: CompanyContext; senderName?: string | null },
+  onUpdate?: (patch: Partial<AgentRequest>) => void,
+): Promise<void> {
+  return runBackendAgent(
+    requestId,
+    (signal) =>
+      authedFetch<unknown>('/support/run', {
+        method: 'POST',
+        signal,
+        body: JSON.stringify({
+          prompt,
+          request_id: requestId,
+          company_context: options.companyContext,
+          user_name: options.senderName,
+        }),
+      }),
+    onUpdate,
+  )
+}
+
 // Operations: proposes scheduled tasks (or changes to them) for the user to
 // confirm in the chat; the backend runs them on their schedule.
 export function runOperationsAgent(
@@ -339,6 +364,7 @@ export const RUNNABLE_AGENTS: AgentType[] = [
   'sales_outreach',
   'data_reporting',
   'content_copy',
+  'customer_support',
   'operations',
 ]
 
@@ -361,6 +387,9 @@ export function startAgentRun(
   }
   if (request.agent_type === 'operations') {
     return runOperationsAgent(request.id, request.prompt, options, onUpdate)
+  }
+  if (request.agent_type === 'customer_support') {
+    return runSupportAgent(request.id, request.prompt, options, onUpdate)
   }
   if (request.agent_type === 'general') {
     return runGeneralAgent(request, options, onUpdate)

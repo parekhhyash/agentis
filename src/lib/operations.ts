@@ -4,7 +4,7 @@ import { authedFetch } from './backendApi'
 
 // Mirrors backend/agents/operations/schemas.py and api/operations.py.
 
-export type StepAgent = 'general' | 'lead_research' | 'sales_outreach' | 'data_reporting' | 'content_copy'
+export type StepAgent = 'general' | 'lead_research' | 'sales_outreach' | 'data_reporting' | 'content_copy' | 'customer_support'
 
 export interface TaskStep {
   agent: StepAgent
@@ -86,6 +86,7 @@ export const STEP_LABELS: Record<StepAgent, string> = {
   sales_outreach: 'Sales & Outreach',
   data_reporting: 'Data & Reporting',
   content_copy: 'Content & Copy',
+  customer_support: 'Customer Support',
 }
 
 // A run time in the task's own time zone: "Mon 13 Oct, 9:00 AM".

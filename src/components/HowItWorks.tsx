@@ -49,13 +49,13 @@ const STORIES: Story[] = [
   },
   {
     chip: 'Answer tickets',
-    prompt: "Reply to today's refund tickets and flag anything urgent",
+    prompt: "Draft replies to today's refund tickets and flag anything urgent",
     agent: 2,
-    work: 'answering tickets',
-    title: '18 tickets handled',
+    work: 'drafting replies',
+    title: '18 tickets triaged',
     rows: [
-      { mark: '#', name: 'Refund issued', meta: 'Ticket 4821 · replied in 2 min', tile: 'bg-brand-sky text-white' },
-      { mark: '#', name: 'Order delayed', meta: 'Ticket 4822 · sent tracking', tile: 'bg-brand-sky text-white' },
+      { mark: '#', name: 'Refund question', meta: 'Ticket 4821 · reply drafted', tile: 'bg-brand-sky text-white' },
+      { mark: '#', name: 'Order delayed', meta: 'Ticket 4822 · reply drafted', tile: 'bg-brand-sky text-white' },
       { mark: '!', name: 'Damaged item', meta: 'Ticket 4825 · flagged for you', tile: 'bg-brand-pink text-ink' },
     ],
   },

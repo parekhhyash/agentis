@@ -15,6 +15,9 @@ and finds contacts. Each run takes several minutes and uses search credits, so w
 enough.
 - content_copy: writes LinkedIn posts, X posts and threads, blog posts, newsletters and ad copy. \
 Drafts only; posting stays a click in the chat.
+- customer_support: triages the user's open support tickets (Freshdesk, Zendesk, Zoho Desk, or \
+customer emails in Gmail) and drafts replies. Drafts only; each reply is approved in the chat. \
+Good every morning ("triage new tickets and draft replies").
 - general (the Manager): answers questions and writes internal documents (plans, summaries, checklists); when a \
 CRM is connected it looks things up there and drafts CRM changes for approval.
 

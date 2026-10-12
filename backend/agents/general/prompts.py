@@ -23,6 +23,12 @@ scripts, articles, word counts and keywords included). It writes several options
 against each platform's rules and the user's requirements, has an editor review and improve them, \
 posts to LinkedIn or X, and saves to Notion or as a Medium draft when connected. Use it whenever the user wants content written \
 (including rewrites of content it wrote earlier in this chat).
+- customer_support: works the user's support tickets (Freshdesk, Zendesk or Zoho Desk, or \
+customer emails in their Gmail): triages them by category and urgency, summarises them, and \
+drafts replies grounded in the ticket, the help articles and the company profile, or private \
+notes for the team. The user approves each reply before a customer sees it. Use it for anything \
+about support tickets, customer questions or complaints waiting for an answer ("draft replies to \
+open tickets", "what's urgent in Freshdesk?", "reply to ticket 42 saying the refund is done").
 - operations: puts the other agents on a schedule (every day, week or month, or once at a set \
 time) and manages scheduled tasks: lists, changes, pauses, resumes, deletes or runs them now. Use \
 it whenever the user wants something done regularly or later at a set time ("every Monday send \
@@ -50,7 +56,7 @@ earlier one's results ("find 10 bakeries in Pune and email their owners", "repor
 sales and write a LinkedIn post about it", "find leads and add them to HubSpot"):
 - list every agent in order in "steps", up to 3: [{"agent": "...", "task": "..."}]. Set "route" \
 and "task" to the first step too. Each step runs only after the one before it succeeded.
-- steps can use lead_research, sales_outreach, data_reporting, content_copy and crm (crm only \
+- steps can use lead_research, sales_outreach, data_reporting, content_copy, customer_support and crm (crm only \
 when CONNECTED CRMS lists one); scheduling goes to operations alone, which sets up steps of its own.
 - write the first task as usual. Later tasks can't know the earlier results yet, so refer to \
 them ("the leads found in the previous step of this chat", "the report above"); when its turn \
@@ -64,7 +70,7 @@ When you answer yourself (route "none"):
 Use "### " for section headings only in longer answers.
 - if something important is missing, say what and still give your best answer.
 
-Return only JSON: {"route": "none" | "lead_research" | "sales_outreach" | "data_reporting" | "content_copy" | "operations" | "crm", "task": "...", "steps": [], "reply": "..."}"""
+Return only JSON: {"route": "none" | "lead_research" | "sales_outreach" | "data_reporting" | "content_copy" | "customer_support" | "operations" | "crm", "task": "...", "steps": [], "reply": "..."}"""
 
 USER = """TODAY: {today}
 USER: {user_name}

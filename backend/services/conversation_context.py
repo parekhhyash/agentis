@@ -19,6 +19,7 @@ AGENT_LABELS = {
     "sales_outreach": "Sales & Outreach",
     "data_reporting": "Data & Reporting",
     "content_copy": "Content & Copy",
+    "customer_support": "Customer Support",
     "operations": "Operations",
 }
 
@@ -98,6 +99,18 @@ def summarize(row: dict[str, Any]) -> str:
             )
             lines.append(f"- {piece.get('label')} ({len(variants)} options){' [' + posted + ']' if posted else ''}: "
                          f"{(best.get('title') + ': ') if best.get('title') else ''}{_clip(body, 500)}")
+        return "\n".join(lines)
+
+    if kind == "customer_support":
+        lines = [_clip(result.get("summary", ""), 300)]
+        for t in (result.get("tickets") or [])[:8]:
+            draft = t.get("draft") or {}
+            triage = t.get("triage") or {}
+            lines.append(
+                f"- {result.get('source_name')} ticket #{t.get('ticket_id')} \"{_clip(t.get('subject', ''), 80)}\" from "
+                f"{t.get('requester')} ({triage.get('category')}, {triage.get('urgency')})"
+                + (f" [{draft.get('status')}]: {_clip(draft.get('body', ''), 300)}" if draft else "")
+            )
         return "\n".join(lines)
 
     if kind == "operations":

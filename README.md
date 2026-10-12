@@ -38,6 +38,7 @@ The system is built as a **React + TypeScript** frontend (Vite) paired with a **
 - **Lead Research Agent** — Discovers, filters, deeply researches, and qualifies companies as potential sales leads using Exa search and LLM analysis
 - **Sales & Outreach Agent** — Drafts personalized emails, thread-aware replies, and calendar invitations using the user's connected Gmail and Google Calendar
 - **Manager Agent** — The default chat agent (`general` in the code and database): answers questions with company and conversation context, or hands the task to the right specialist. A message that needs several agents in order ("find 10 bakeries in Pune and email their owners", "report last month's sales and write a LinkedIn post about it", "find leads and add them to HubSpot") becomes a plan of up to 3 steps: each runs as its own turn of the chat once the one before it succeeded (Lead Research must find at least one lead), and reads the chat, so it works on the earlier results. The Manager's turn shows the plan and each step's status, and offers to continue a plan that was interrupted (say, by a reload). Emails and CRM changes still wait for approval. Scheduled tasks run the Manager's plans the same way
+- **Customer Support Agent** — Works the user's support tickets in **Freshdesk**, **Zendesk** or **Zoho Desk**, or customer emails in their Gmail for teams without a helpdesk. It triages each ticket (category, urgency, sentiment, tags, summary) and drafts a reply grounded in the ticket, the helpdesk's own help articles, the company profile and any facts the user gives; when it can't answer from those (an order lookup, a refund decision) it says what's needed in a note for the team. Code flags any link, email address, amount or timeline in a reply that those sources don't back. Every reply is a draft the user edits and approves: send it to the customer, post it as a private note, or set the suggested priority and tags. Nothing is ever deleted
 - **CRM integrations over MCP** — Connect **HubSpot**, **Salesforce** or **Zoho CRM** through their official MCP servers, all free to integrate, each person with their own account. Ask the Manager about contacts, companies and deals, ask it to update records, or add researched leads with one click. Lookups run on their own; every change is a draft you approve; delete and merge tools are never used
 - **Google Sheets** — Link a sheet as a data file for Data & Reporting (read again whenever a report or a scheduled run uses it), and export researched leads or any report table to a new sheet, through the same Agentis Google sign-in as Gmail
 - **Data & Reporting Agent** — Answers questions about numbers with headline figures, charts and tables, from the user's Agentis activity (leads, emails, replies, meetings), CSV/Excel files they upload and Google Sheets they link. The model plans queries; the backend runs every calculation, and the written summary may only quote numbers that the queries produced
@@ -494,6 +495,43 @@ Scores and the editor's notes are the agent's own working notes, used to improve
 
 **Notion and Medium** — Every option has "Save to Notion": a private page at the top of the user's workspace, created from markdown (`POST /v1/pages` with `markdown`, `Notion-Version: 2026-03-11`). Articles (blog posts, Medium stories, long-form pieces) can also be saved as **Medium drafts** (`publishStatus: draft`; the user publishes from Medium). Neither is public, so they skip the confirm step and the limit gate; each option is saved once per destination and the link is kept on the chat turn.
 
+### Customer Support Agent
+
+```
+"Draft replies to my open Freshdesk tickets"
+  │
+  ▼
+┌──────────────────────────────────────────────────────────────────┐
+│ 1. Plan                1 fast call: which connected source       │
+│                        (helpdesks before Gmail), ticket numbers  │
+│                        or open tickets, how many (max 8), draft /│
+│                        triage / summarise, reply or note, and    │
+│                        the user's own facts ("refunds take 5-7   │
+│                        days") copied as guidance                 │
+├──────────────────────────────────────────────────────────────────┤
+│ 2. Fetch (code)        Open tickets (newest first) and each one's│
+│                        conversation, newest 12 messages kept;    │
+│                        Gmail: inbox threads waiting on a reply   │
+├──────────────────────────────────────────────────────────────────┤
+│ 3. Per ticket          Help-article search on the subject, then  │
+│    (3 at a time)       1 call: triage + a reply, or a note for   │
+│                        the team when it needs a person. Ticket   │
+│                        text is untrusted: instructions in it are │
+│                        ignored                                   │
+├──────────────────────────────────────────────────────────────────┤
+│ 4. Check (code)        Links, email addresses, amounts and       │
+│                        timelines in a reply must appear in the   │
+│                        ticket, articles, profile or guidance;    │
+│                        anything else is flagged on the draft     │
+└──────────────────────────────────────────────────────────────────┘
+  │
+  ▼  the user edits and approves each draft
+  Send reply (to the customer, from the helpdesk or Gmail thread) · Post as private note ·
+  Set priority and tags · Discard
+```
+
+Freshdesk and Zendesk connect with each company's own API key (checked against the helpdesk, then stored encrypted); Zoho Desk signs in through one Agentis app and works in the account's own data centre. Replies from Gmail go to the address in the thread's headers, never one from the model. Zoho Desk email replies go out from the support address the customer wrote to. The Manager hands support requests to this agent, can chain it with others, and Operations can run it every morning ("triage new tickets and draft replies").
+
 ### Operations Agent (scheduled tasks)
 
 ```
@@ -527,7 +565,7 @@ Scores and the editor's notes are the agent's own working notes, used to improve
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-Steps use the existing agents (Data & Reporting, Sales & Outreach, Lead Research, Content & Copy, the Manager with CRM), so a scheduled run can only do what those agents do in the chat: read, research, write and **draft**. Sending, posting and CRM changes still need the user's click. Schedule times are wall-clock times in the task's time zone, so "Monday at 9" stays at 9 across daylight-saving changes; a run missed while the service was down happens once when it's back.
+Steps use the existing agents (Data & Reporting, Sales & Outreach, Lead Research, Content & Copy, Customer Support, the Manager with CRM), so a scheduled run can only do what those agents do in the chat: read, research, write and **draft**. Sending, posting and CRM changes still need the user's click. Schedule times are wall-clock times in the task's time zone, so "Monday at 9" stays at 9 across daylight-saving changes; a run missed while the service was down happens once when it's back.
 
 ---
 
@@ -692,7 +730,25 @@ No Notion review is needed (that's only for a Marketplace listing). Pages are cr
 
 **Medium** — nothing to set up. Medium stopped issuing integration tokens on 1 January 2025; users who made one before then paste it on the Connect page (Medium > Settings > Security and apps > Integration tokens) and stories save as drafts. Everyone else uses **Copy for Medium**, which copies a story as rich text for Medium's editor.
 
-### 8. Scheduled Tasks Setup (Operations)
+### 8. Helpdesk Setup (Optional — Customer Support)
+
+Run `supabase/migrations/20261015000000_support_connections.sql`. `INTEGRATIONS_ENCRYPTION_KEY` must be set.
+
+| | Who sets it up | Cost |
+|---|---|---|
+| Freshdesk | Nobody on the server: each company pastes its address and an agent's API key (Profile settings > Your API key) | Free to integrate (the API comes with the Freshdesk account; check your plan's API limits) |
+| Zendesk | Nobody on the server: each company pastes its address, an agent's email and an API token (Admin Center > Apps and integrations > APIs > Zendesk API, turn on Token access) | Free to integrate; Zendesk itself is paid (trial available) |
+| Zoho Desk | You, once: one app in Zoho's API console | Free to integrate (registering the app is free; API calls count against the Zoho Desk plan's limits) |
+| Gmail | Nothing: uses the Gmail connection | Free |
+
+**Zoho Desk**
+1. At [api-console.zoho.com](https://api-console.zoho.com) add a **Server-based Application**: name Agentis, homepage the frontend URL, and the redirect URI `https://<your-backend>/integrations/support/callback` (`SUPPORT_OAUTH_REDIRECT_URI`, defaults to the Google callback's host).
+2. In its settings, turn on **Multi-DC** so accounts in every data centre (zoho.com, zoho.in, zoho.eu, ...) can sign in.
+3. Set `ZOHO_DESK_CLIENT_ID` and `ZOHO_DESK_CLIENT_SECRET` on the backend.
+
+People then click Connect on the Zoho Desk card and allow access (scopes `Desk.tickets.ALL`, `Desk.basic.READ`, `Desk.contacts.READ`, `Desk.articles.READ`; Agentis never deletes tickets). The default portal is used if the account has several.
+
+### 9. Scheduled Tasks Setup (Operations)
 
 Run `supabase/migrations/20261012000000_operations_scheduler.sql`. It creates the task tables, the claim functions, and a `pg_cron` job (`operations-wake`, every minute) that calls the backend through `pg_net` whenever a task is due or running. The job reads two **Vault** secrets; create them once in the SQL editor:
 
@@ -743,6 +799,9 @@ The secret never leaves the database: pg_cron sends it as `X-Operations-Secret`,
 | `SOCIAL_OAUTH_REDIRECT_URI` | ❌ | LinkedIn/X callback (default: derived from `GOOGLE_OAUTH_REDIRECT_URI`) |
 | `NOTION_CLIENT_ID` / `NOTION_CLIENT_SECRET` | For Save to Notion | Notion public integration OAuth credentials |
 | `NOTION_API_VERSION` | ❌ | `Notion-Version` header (default: `2026-03-11`) |
+| `ZOHO_DESK_CLIENT_ID` / `ZOHO_DESK_CLIENT_SECRET` | For Zoho Desk | Zoho API console app (Server-based Application, multi-DC) |
+| `SUPPORT_OAUTH_REDIRECT_URI` | ❌ | Zoho Desk callback (default: derived from `GOOGLE_OAUTH_REDIRECT_URI`) |
+| `SUPPORT_MAX_TICKETS` | ❌ | Most tickets one Customer Support request works on (default: `8`) |
 | `OPERATIONS_SCHEDULER_INTERVAL_SECONDS` | ❌ | While awake, check for due scheduled tasks this often (default: `60`, `0` = off) |
 | `OPERATIONS_MAX_TASKS` | ❌ | Scheduled tasks per user (default: `10`) |
 
@@ -843,6 +902,17 @@ The frontend runs at `http://localhost:5173` and the backend at `http://localhos
 | `POST` | `/integrations/social/medium/token` | ✅ Bearer | Checks a pasted Medium integration token and stores it |
 | `GET` | `/integrations/social/callback` | ❌ | OAuth callback (internal) |
 | `DELETE` | `/integrations/social/{provider}` | ✅ Bearer | Disconnect |
+
+### Customer Support
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `POST` | `/support/run` | ✅ Bearer | Triage tickets and draft replies for a message |
+| `POST` | `/support/requests/{id}/tickets/{draft_id}` | ✅ Bearer | Act on one ticket's draft: `decision` `reply`, `note`, `triage`, `save` or `discard`, with the edited `body` |
+| `GET` | `/integrations/support` | ✅ Bearer | Freshdesk, Zendesk and Zoho Desk status for the user (`connect_with`: `key` or `oauth`) |
+| `POST` | `/integrations/support/{provider}/connect` | ✅ Bearer | Freshdesk/Zendesk: check and save `domain`, `api_key` (and `email` for Zendesk). Zoho Desk: returns the sign-in URL |
+| `GET` | `/integrations/support/callback` | ❌ | Zoho Desk OAuth callback |
+| `DELETE` | `/integrations/support/{provider}` | ✅ Bearer | Disconnect a helpdesk |
 
 ### Operations (scheduled tasks)
 
@@ -987,6 +1057,21 @@ The frontend runs at `http://localhost:5173` and the backend at `http://localhos
 
 ---
 
+### `support_connections`
+
+| Column | Type | Description |
+|---|---|---|
+| `user_id` + `provider` | `uuid` + `text` (PK) | One row per user and helpdesk (`freshdesk`, `zendesk`, `zoho_desk`) |
+| `domain` | `text` | `yourcompany.freshdesk.com`, `yourcompany.zendesk.com`, or the Zoho Desk API host for the account's data centre (`desk.zoho.in`) |
+| `email` | `text` | Zendesk: the agent the API token belongs to |
+| `org_id` | `text` | Zoho Desk organisation (portal) |
+| `account_label` | `text` | Shown on the Connect page |
+| `secret_encrypted` | `text` | Fernet-encrypted API key, API token or Zoho refresh token |
+
+> Backend only: RLS on with no policies.
+
+---
+
 ## Deployment
 
 ### Frontend — Vercel
@@ -1054,7 +1139,7 @@ The codebase defines several agent types that are registered in the UI but do no
 | **Manager** | ✅ Implemented | Answers questions and routes tasks to specialist agents |
 | **Data & Reporting** | ✅ Implemented | Reports with charts from Agentis activity and uploaded files |
 | **Content & Copy** | ✅ Implemented | Social posts, threads, blog posts, Medium stories, emails, ad copy and any writing to your requirements; posts to LinkedIn and X, saves to Notion and Medium |
-| **Customer Support** | 🔜 Planned | Ticket resolution and routing |
+| **Customer Support** | ✅ Implemented | Triages tickets and drafts grounded replies in Freshdesk, Zendesk, Zoho Desk or Gmail; you approve each one |
 | **Operations** | ✅ Implemented | Runs the other agents on a schedule (reports, follow-ups, research, posts) |
 
 ---

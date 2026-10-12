@@ -58,6 +58,11 @@ def _unsupported(text: str, allowed: set[str]) -> list[str]:
     return out
 
 
+def unsupported_figures(text: str, allowed: set[str]) -> list[str]:
+    """Figures in `text` that none of the allowed sources had (other agents' checks use it too)."""
+    return _unsupported(text, allowed)
+
+
 _WORD = re.compile(r"[^\W_](?:[\w'’.-]*[^\W_])?")
 _HEADING = re.compile(r"^\s{0,3}(?:#{1,6}\s+|\*\*)(.+?)(?:\*\*)?\s*$", re.M)
 

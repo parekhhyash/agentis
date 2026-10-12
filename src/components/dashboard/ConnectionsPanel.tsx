@@ -3,14 +3,17 @@ import type { ReactNode } from 'react'
 import { CONNECTORS, type ConnectorInfo } from '../../lib/connectors'
 import type { SocialProvider, useSocialConnections } from '../../lib/content'
 import type { CrmProvider, useCrmConnections } from '../../lib/crm'
+import type { SupportProvider, useSupportConnections } from '../../lib/support'
 import { partConnected, type GooglePart, type GoogleStatus } from '../../lib/googleConnection'
 import CrmConnectControls from './CrmConnectControls'
 import DataFilesPanel from './DataFilesPanel'
 import SocialConnectControls from './SocialConnectControls'
+import SupportConnectControls from './SupportConnectControls'
 
 const GOOGLE_IDS = new Set<string>(['gmail', 'calendar', 'sheets'])
 const CRM_IDS = new Set<string>(['hubspot', 'salesforce', 'zoho'])
 const SOCIAL_IDS = new Set<string>(['linkedin', 'x', 'notion', 'medium'])
+const SUPPORT_IDS = new Set<string>(['freshdesk', 'zendesk', 'zoho_desk'])
 
 // The app's own logo, straight on the card (no tile), in both themes; black
 // marks (X, Notion, Medium) turn white in dark mode.
@@ -92,11 +95,13 @@ export default function ConnectionsPanel({
   google,
   crm,
   social,
+  support,
   notice,
 }: {
   google: Google
   crm: ReturnType<typeof useCrmConnections>
   social: ReturnType<typeof useSocialConnections>
+  support: ReturnType<typeof useSupportConnections>
   notice: ReactNode
 }) {
   const sheets = {
@@ -123,6 +128,8 @@ export default function ConnectionsPanel({
               <GoogleControls part={connector.id as GooglePart} google={google} />
             ) : CRM_IDS.has(connector.id) ? (
               <CrmConnectControls provider={connector.id as CrmProvider} crm={crm} />
+            ) : SUPPORT_IDS.has(connector.id) ? (
+              <SupportConnectControls provider={connector.id as SupportProvider} support={support} />
             ) : SOCIAL_IDS.has(connector.id) ? (
               <SocialConnectControls provider={connector.id as SocialProvider} social={social} />
             ) : (

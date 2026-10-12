@@ -15,6 +15,8 @@ from api.operations import router as operations_router
 from api.outreach import router as outreach_router
 from api.routes import router as sales_agent_router
 from api.social import router as social_router
+from api.support import agent_router as support_router
+from api.support import router as support_integrations_router
 from config.settings import get_settings
 from services import scheduler
 
@@ -39,7 +41,7 @@ app = FastAPI(
     title="Agentis Agent API",
     description=(
         "Backend API exposing Agentis's AI agents (Manager, Lead Research, Sales & Outreach, "
-        "Data & Reporting, Content & Copy, Operations)."
+        "Data & Reporting, Content & Copy, Customer Support, Operations)."
     ),
     version="0.1.0",
     lifespan=lifespan,
@@ -63,6 +65,8 @@ app.include_router(social_router)
 app.include_router(integrations_router)
 app.include_router(crm_router)
 app.include_router(crm_actions_router)
+app.include_router(support_router)
+app.include_router(support_integrations_router)
 
 
 @app.get("/health")
