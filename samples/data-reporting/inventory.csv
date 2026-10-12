@@ -1,0 +1,13 @@
+SKU,Product,Category,Stock On Hand,Reorder Level,Unit Cost,Supplier,Last Restocked
+SKU-101,Masala Makhana 100g,Snacks,150,100,₹86,Nashik Agro Foods,14 Sep 2026
+SKU-102,Peri Peri Makhana 100g,Snacks,240,50,₹82,Nashik Agro Foods,07 Oct 2026
+SKU-103,Roasted Chana Mix 200g,Snacks,120,40,₹74,Nashik Agro Foods,07 Sep 2026
+SKU-104,Ragi Chips 90g,Snacks,150,50,₹55,Nashik Agro Foods,12 Sep 2026
+SKU-105,Jaggery Peanut Chikki (12),Sweets,75,80,₹88,Rajkot Mithai Co,05 Sep 2026
+SKU-106,Dry Fruit Laddoo Box,Sweets,60,80,₹265,Rajkot Mithai Co,17 Sep 2026
+SKU-107,Kaju Katli 250g,Sweets,240,50,₹260,Rajkot Mithai Co,07 Sep 2026
+SKU-108,Assam Masala Chai 250g,Beverages,44,50,₹139,Nilgiri Estates,06 Oct 2026
+SKU-109,Kashmiri Kahwa 100g,Beverages,18,50,₹148,Nilgiri Estates,13 Sep 2026
+SKU-110,Filter Coffee Powder 250g,Beverages,44,40,₹121,Nilgiri Estates,27 Aug 2026
+SKU-111,Festive Hamper Small,Gift Boxes,150,100,₹546,In-house packing,18 Sep 2026
+SKU-112,Festive Hamper Large,Gift Boxes,35,40,₹968,In-house packing,17 Sep 2026

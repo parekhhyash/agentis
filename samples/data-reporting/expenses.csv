@@ -1,0 +1,141 @@
+Date,Category,Vendor,Amount,Paid By,GST Included
+2026-04-01,Salaries,Team payroll,"₹1,20,000",Bank transfer,No
+2026-04-02,Ads - Meta,Meta Ads,"₹12,226",Card,Yes
+2026-04-03,Rent,"Warehouse, Bhiwandi","₹35,000",Bank transfer,Yes
+2026-04-03,Ads - Google,Google Ads,"₹8,800",Card,Yes
+2026-04-04,Packaging,PackRight India,"₹5,737",Bank transfer,Yes
+2026-04-05,Software,Shopify,"₹7,400",Card,Yes
+2026-04-05,Software,Zoho One,"₹4,300",Card,Yes
+2026-04-05,Shipping,Blue Dart,"₹7,730",Bank transfer,Yes
+2026-04-07,Utilities,Electricity and internet,"₹10,498",UPI,Yes
+2026-04-09,Ads - Meta,Meta Ads,"₹8,924",Card,Yes
+2026-04-10,Ads - Google,Google Ads,"₹5,348",Card,Yes
+2026-04-11,Packaging,PackRight India,"₹5,578",Bank transfer,Yes
+2026-04-12,Shipping,Shiprocket,"₹7,459",Bank transfer,Yes
+2026-04-16,Ads - Meta,Meta Ads,"₹12,744",Card,Yes
+2026-04-17,Ads - Google,Google Ads,"₹8,014",Card,Yes
+2026-04-18,Packaging,BoxKraft Pvt Ltd,"₹6,719",Bank transfer,Yes
+2026-04-19,Shipping,Delhivery,"₹6,654",Bank transfer,Yes
+2026-04-23,Ads - Meta,Meta Ads,"₹11,390",Card,Yes
+2026-04-24,Ads - Google,Google Ads,"₹5,268",Card,Yes
+2026-04-25,Packaging,PackRight India,"₹4,170",Bank transfer,Yes
+2026-04-26,Shipping,Blue Dart,"₹7,314",Bank transfer,Yes
+2026-05-01,Salaries,Team payroll,"₹1,25,000",Bank transfer,No
+2026-05-02,Ads - Meta,Meta Ads,"₹8,230",Card,Yes
+2026-05-03,Rent,"Warehouse, Bhiwandi","₹35,000",Bank transfer,Yes
+2026-05-03,Ads - Google,Google Ads,"₹6,363",Card,Yes
+2026-05-04,Packaging,BoxKraft Pvt Ltd,"₹5,535",Bank transfer,Yes
+2026-05-05,Software,Shopify,"₹7,400",Card,Yes
+2026-05-05,Software,Zoho One,"₹4,300",Card,Yes
+2026-05-05,Shipping,Delhivery,"₹7,046",Bank transfer,Yes
+2026-05-07,Utilities,Electricity and internet,"₹12,542",UPI,Yes
+2026-05-09,Ads - Meta,Meta Ads,"₹10,920",Card,Yes
+2026-05-10,Ads - Google,Google Ads,"₹7,636",Card,Yes
+2026-05-11,Packaging,BoxKraft Pvt Ltd,"₹6,408",Bank transfer,Yes
+2026-05-12,Shipping,Shiprocket,"₹7,728",Bank transfer,Yes
+2026-05-16,Ads - Meta,Meta Ads,"₹10,680",Card,Yes
+2026-05-17,Ads - Google,Google Ads,"₹6,801",Card,Yes
+2026-05-18,Packaging,BoxKraft Pvt Ltd,"₹6,234",Bank transfer,Yes
+2026-05-19,Shipping,Shiprocket,"₹7,011",Bank transfer,Yes
+2026-05-23,Ads - Meta,Meta Ads,"₹10,987",Card,Yes
+2026-05-24,Ads - Google,Google Ads,"₹8,898",Card,Yes
+2026-05-25,Packaging,BoxKraft Pvt Ltd,"₹5,013",Bank transfer,Yes
+2026-05-26,Shipping,Blue Dart,"₹8,687",Bank transfer,Yes
+2026-06-01,Salaries,Team payroll,"₹1,30,000",Bank transfer,No
+2026-06-02,Ads - Meta,Meta Ads,"₹12,171",Card,Yes
+2026-06-03,Rent,"Warehouse, Bhiwandi","₹35,000",Bank transfer,Yes
+2026-06-03,Ads - Google,Google Ads,"₹5,668",Card,Yes
+2026-06-04,Packaging,PackRight India,"₹4,652",Bank transfer,Yes
+2026-06-05,Software,Shopify,"₹7,400",Card,Yes
+2026-06-05,Software,Zoho One,"₹4,300",Card,Yes
+2026-06-05,Shipping,Shiprocket,"₹7,639",Bank transfer,Yes
+2026-06-07,Utilities,Electricity and internet,"₹11,430",UPI,Yes
+2026-06-09,Ads - Meta,Meta Ads,"₹13,402",Card,Yes
+2026-06-10,Ads - Google,Google Ads,"₹5,581",Card,Yes
+2026-06-11,Packaging,BoxKraft Pvt Ltd,"₹5,917",Bank transfer,Yes
+2026-06-12,Shipping,Blue Dart,"₹7,974",Bank transfer,Yes
+2026-06-16,Ads - Meta,Meta Ads,"₹10,745",Card,Yes
+2026-06-17,Ads - Google,Google Ads,"₹7,291",Card,Yes
+2026-06-18,Packaging,BoxKraft Pvt Ltd,"₹4,272",Bank transfer,Yes
+2026-06-19,Shipping,Blue Dart,"₹7,352",Bank transfer,Yes
+2026-06-23,Ads - Meta,Meta Ads,"₹12,418",Card,Yes
+2026-06-24,Ads - Google,Google Ads,"₹8,335",Card,Yes
+2026-06-25,Packaging,PackRight India,"₹5,742",Bank transfer,Yes
+2026-06-26,Shipping,Shiprocket,"₹8,244",Bank transfer,Yes
+2026-07-01,Salaries,Team payroll,"₹1,35,000",Bank transfer,No
+2026-07-02,Ads - Meta,Meta Ads,"₹12,954",Card,Yes
+2026-07-03,Rent,"Warehouse, Bhiwandi","₹35,000",Bank transfer,Yes
+2026-07-03,Ads - Google,Google Ads,"₹8,559",Card,Yes
+2026-07-04,Packaging,BoxKraft Pvt Ltd,"₹4,017",Bank transfer,Yes
+2026-07-05,Software,Shopify,"₹7,400",Card,Yes
+2026-07-05,Software,Zoho One,"₹4,300",Card,Yes
+2026-07-05,Shipping,Delhivery,"₹6,026",Bank transfer,Yes
+2026-07-07,Utilities,Electricity and internet,"₹10,986",UPI,Yes
+2026-07-09,Ads - Meta,Meta Ads,"₹9,242",Card,Yes
+2026-07-10,Ads - Google,Google Ads,"₹8,230",Card,Yes
+2026-07-11,Packaging,PackRight India,"₹4,837",Bank transfer,Yes
+2026-07-12,Shipping,Delhivery,"₹9,690",Bank transfer,Yes
+2026-07-16,Ads - Meta,Meta Ads,"₹11,784",Card,Yes
+2026-07-17,Ads - Google,Google Ads,"₹5,732",Card,Yes
+2026-07-18,Packaging,PackRight India,"₹5,573",Bank transfer,Yes
+2026-07-19,Shipping,Shiprocket,"₹8,426",Bank transfer,Yes
+2026-07-23,Ads - Meta,Meta Ads,"₹12,588",Card,Yes
+2026-07-24,Ads - Google,Google Ads,"₹8,322",Card,Yes
+2026-07-25,Packaging,BoxKraft Pvt Ltd,"₹5,044",Bank transfer,Yes
+2026-07-26,Shipping,Shiprocket,"₹6,285",Bank transfer,Yes
+2026-08-01,Salaries,Team payroll,"₹1,40,000",Bank transfer,No
+2026-08-02,Ads - Meta,Meta Ads,"₹11,039",Card,Yes
+2026-08-03,Rent,"Warehouse, Bhiwandi","₹35,000",Bank transfer,Yes
+2026-08-03,Ads - Google,Google Ads,"₹8,321",Card,Yes
+2026-08-04,Packaging,BoxKraft Pvt Ltd,"₹4,674",Bank transfer,Yes
+2026-08-05,Software,Shopify,"₹7,400",Card,Yes
+2026-08-05,Software,Zoho One,"₹4,300",Card,Yes
+2026-08-05,Shipping,Shiprocket,"₹6,515",Bank transfer,Yes
+2026-08-07,Utilities,Electricity and internet,"₹11,613",UPI,Yes
+2026-08-09,Ads - Meta,Meta Ads,"₹12,242",Card,Yes
+2026-08-10,Ads - Google,Google Ads,"₹6,518",Card,Yes
+2026-08-11,Packaging,PackRight India,"₹5,746",Bank transfer,Yes
+2026-08-12,Shipping,Delhivery,"₹9,966",Bank transfer,Yes
+2026-08-16,Ads - Meta,Meta Ads,"₹9,954",Card,Yes
+2026-08-17,Ads - Google,Google Ads,"₹5,018",Card,Yes
+2026-08-18,Packaging,PackRight India,"₹4,780",Bank transfer,Yes
+2026-08-19,Shipping,Delhivery,"₹8,192",Bank transfer,Yes
+2026-08-20,Marketing,Influencer campaign (Rakhi),"₹45,000",Bank transfer,No
+2026-08-23,Ads - Meta,Meta Ads,"₹12,622",Card,Yes
+2026-08-24,Ads - Google,Google Ads,"₹8,784",Card,Yes
+2026-08-25,Packaging,PackRight India,"₹4,512",Bank transfer,Yes
+2026-08-26,Shipping,Blue Dart,"₹9,450",Bank transfer,Yes
+2026-09-01,Salaries,Team payroll,"₹1,45,000",Bank transfer,No
+2026-09-02,Ads - Meta,Meta Ads,"₹17,203",Card,Yes
+2026-09-03,Rent,"Warehouse, Bhiwandi","₹35,000",Bank transfer,Yes
+2026-09-03,Ads - Google,Google Ads,"₹8,931",Card,Yes
+2026-09-04,Packaging,BoxKraft Pvt Ltd,"₹8,158",Bank transfer,Yes
+2026-09-05,Software,Shopify,"₹7,400",Card,Yes
+2026-09-05,Software,Zoho One,"₹4,300",Card,Yes
+2026-09-05,Shipping,Blue Dart,"₹12,297",Bank transfer,Yes
+2026-09-07,Utilities,Electricity and internet,"₹9,032",UPI,Yes
+2026-09-09,Ads - Meta,Meta Ads,"₹12,177",Card,Yes
+2026-09-10,Ads - Google,Google Ads,"₹11,558",Card,Yes
+2026-09-11,Packaging,PackRight India,"₹7,730",Bank transfer,Yes
+2026-09-12,Shipping,Shiprocket,"₹10,227",Bank transfer,Yes
+2026-09-16,Ads - Meta,Meta Ads,"₹11,634",Card,Yes
+2026-09-17,Ads - Google,Google Ads,"₹7,144",Card,Yes
+2026-09-18,Packaging,PackRight India,"₹5,946",Bank transfer,Yes
+2026-09-19,Shipping,Shiprocket,"₹8,482",Bank transfer,Yes
+2026-09-23,Ads - Meta,Meta Ads,"₹17,783",Card,Yes
+2026-09-24,Ads - Google,Google Ads,"₹10,400",Card,Yes
+2026-09-25,Packaging,PackRight India,"₹8,674",Bank transfer,Yes
+2026-09-26,Shipping,Blue Dart,"₹12,706",Bank transfer,Yes
+2026-10-01,Salaries,Team payroll,"₹1,50,000",Bank transfer,No
+2026-10-02,Ads - Meta,Meta Ads,"₹17,325",Card,Yes
+2026-10-03,Rent,"Warehouse, Bhiwandi","₹35,000",Bank transfer,Yes
+2026-10-03,Ads - Google,Google Ads,"₹9,007",Card,Yes
+2026-10-04,Packaging,BoxKraft Pvt Ltd,"₹7,263",Bank transfer,Yes
+2026-10-04,Marketing,Diwali influencer campaign,"₹80,000",Bank transfer,No
+2026-10-05,Software,Shopify,"₹7,400",Card,Yes
+2026-10-05,Software,Zoho One,"₹4,300",Card,Yes
+2026-10-05,Shipping,Shiprocket,"₹17,489",Bank transfer,Yes
+2026-10-07,Utilities,Electricity and internet,"₹10,597",UPI,Yes
+2026-10-09,Ads - Meta,Meta Ads,"₹15,622",Card,Yes
+2026-10-10,Ads - Google,Google Ads,"₹10,078",Card,Yes
+2026-10-11,Packaging,BoxKraft Pvt Ltd,"₹7,553",Bank transfer,Yes
