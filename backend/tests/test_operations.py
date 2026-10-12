@@ -350,6 +350,40 @@ def test_general_steps_follow_a_hand_off(db, agents):
     assert db.tables["scheduled_tasks"][0]["last_status"] == "partial"
 
 
+def test_general_can_hand_a_step_to_several_agents_in_order(db, agents, monkeypatch):
+    from agents.general.agent import Handoff
+
+    calls, failing = agents
+    general_prompts: list[str] = []
+
+    async def general(user, *, prompt, request_id, **kwargs):
+        general_prompts.append(prompt)
+        await db.update("agent_requests", {"id": f"eq.{request_id}"}, {"status": "completed"})
+        if len(general_prompts) > 1:  # the CRM step, which General handles itself
+            return GeneralResult(reply="Added 3 companies to HubSpot")
+        steps = [
+            Handoff(agent="lead_research", task="Find 3 bakeries in Pune"),
+            Handoff(agent="crm", task="Add the leads found in the previous step to HubSpot"),
+            Handoff(agent="sales_outreach", task="Email the leads found earlier in this chat"),
+        ]
+        return GeneralResult(reply="Three steps", route="lead_research", task=steps[0].task, steps=steps)
+
+    monkeypatch.setattr(scheduler, "run_general", general)
+    _add_task(db, [{"agent": "general", "prompt": "Find bakeries, add them to HubSpot and email them"}])
+    asyncio.run(scheduler.execute(copy.deepcopy(db.tables["scheduled_tasks"][0]), "manual"))
+    assert [c[0] for c in calls] == ["lead_research", "sales_outreach"]
+    assert general_prompts[1] == "Add the leads found in the previous step to HubSpot"
+    assert [t["agent_type"] for t in db.tables["agent_requests"]] == ["general", "lead_research", "general", "sales_outreach"]
+    assert db.tables["scheduled_tasks"][0]["last_status"] == "completed"
+
+    # A failed step stops the rest.
+    calls.clear()
+    general_prompts.clear()
+    failing.add("lead_research")
+    asyncio.run(scheduler.execute(copy.deepcopy(db.tables["scheduled_tasks"][0]), "manual"))
+    assert [c[0] for c in calls] == ["lead_research"] and len(general_prompts) == 1
+
+
 def test_a_run_that_breaks_is_still_recorded_and_unlocked(db, agents, monkeypatch):
     _add_task(db, [REPORT], locked_until=(datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat())
 

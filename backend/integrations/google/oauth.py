@@ -32,23 +32,41 @@ CALENDAR_EVENTS = "https://www.googleapis.com/auth/calendar.events"
 SHEETS_READ = "https://www.googleapis.com/auth/spreadsheets.readonly"
 DRIVE_FILE = "https://www.googleapis.com/auth/drive.file"
 
+# Gmail, Google Calendar and Google Sheets are each connected on their own
+# (incremental sign-in onto one Google grant per user).
 # gmail.readonly is only used to find and read the threads the user asks to
-# reply to; calendar.events covers creating events (with Meet links) and
-# reading the user's own events for conflict checks.
-SCOPES = ["openid", "email", GMAIL_SEND, GMAIL_READ, CALENDAR_EVENTS]
-REQUIRED_SCOPES = {GMAIL_SEND, GMAIL_READ, CALENDAR_EVENTS}
-# Google Sheets, asked for separately (incremental sign-in): read the sheets
-# a user links, and create new ones (drive.file reaches only files Agentis made).
+# reply to.
+GMAIL_SCOPES = ["openid", "email", GMAIL_SEND, GMAIL_READ]
+REQUIRED_GMAIL_SCOPES = {GMAIL_SEND, GMAIL_READ}
+# calendar.events covers creating events (with Meet links) and reading the
+# user's own events for conflict checks.
+CALENDAR_SCOPES = ["openid", "email", CALENDAR_EVENTS]
+REQUIRED_CALENDAR_SCOPES = {CALENDAR_EVENTS}
+# Read the sheets a user links, and create new ones (drive.file reaches only
+# files Agentis made).
 SHEETS_SCOPES = ["openid", "email", SHEETS_READ, DRIVE_FILE]
 REQUIRED_SHEETS_SCOPES = {SHEETS_READ, DRIVE_FILE}
 
+PARTS = ("gmail", "calendar", "sheets")
+ASKED_FOR = {"gmail": GMAIL_SCOPES, "calendar": CALENDAR_SCOPES, "sheets": SHEETS_SCOPES}
+REQUIRED = {"gmail": REQUIRED_GMAIL_SCOPES, "calendar": REQUIRED_CALENDAR_SCOPES, "sheets": REQUIRED_SHEETS_SCOPES}
+PART_NAMES = {"gmail": "Gmail", "calendar": "Google Calendar", "sheets": "Google Sheets"}
+
+
+def has(part: str, scopes: list[str]) -> bool:
+    return REQUIRED[part] <= set(scopes)
+
 
 def has_gmail(scopes: list[str]) -> bool:
-    return REQUIRED_SCOPES <= set(scopes)
+    return has("gmail", scopes)
+
+
+def has_calendar(scopes: list[str]) -> bool:
+    return has("calendar", scopes)
 
 
 def has_sheets(scopes: list[str]) -> bool:
-    return REQUIRED_SHEETS_SCOPES <= set(scopes)
+    return has("sheets", scopes)
 
 STATE_TTL_SECONDS = 600
 
@@ -88,7 +106,7 @@ def _state_key(secret_key: str) -> bytes:
 
 
 def sign_state(user_id: str, secret_key: str, now: float | None = None, purpose: str = "") -> str:
-    """`purpose` is "sheets" for the Google Sheets sign-in, else Gmail and Calendar."""
+    """`purpose` is the part being connected ("calendar" or "sheets"; empty for Gmail)."""
     payload = {"u": user_id, "n": secrets.token_urlsafe(12), "e": int((now or time.time()) + STATE_TTL_SECONDS)}
     if purpose:
         payload["p"] = purpose
@@ -125,7 +143,7 @@ def build_auth_url(config: OAuthConfig, state: str, login_hint: str | None = Non
         "client_id": config.client_id,
         "redirect_uri": config.redirect_uri,
         "response_type": "code",
-        "scope": " ".join(scopes or SCOPES),
+        "scope": " ".join(scopes or GMAIL_SCOPES),
         "access_type": "offline",
         # Always show consent so Google returns a refresh token even if the
         # user connected before.

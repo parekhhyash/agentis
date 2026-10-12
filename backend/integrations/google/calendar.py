@@ -36,7 +36,7 @@ def event_body(
 
 class CalendarClient:
     def __init__(self, access_token: str, client: httpx.AsyncClient):
-        self._api = GoogleApi(access_token, client, BASE_URL)
+        self._api = GoogleApi(access_token, client, BASE_URL, permission="Google Calendar")
 
     async def events_between(self, time_min: str, time_max: str) -> list[dict[str, Any]]:
         """Busy events on the primary calendar overlapping [time_min, time_max) (RFC 3339)."""

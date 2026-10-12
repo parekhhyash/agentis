@@ -14,7 +14,7 @@ from agents.lead_research.errors import LLMOutputError, ResearchConfigError
 from agents.lead_research.llm import build_llm_client
 from agents.sales_outreach import OutreachCancelledError, OutreachContext, OutreachResult, SalesOutreachAgent, compact_leads
 from agents.sales_outreach.agent import SentItem
-from agents.sales_outreach.schemas import EmailAction, ReplyAction
+from agents.sales_outreach.schemas import EmailAction, MeetingAction, ReplyAction
 from agents.sales_outreach.executor import EditError, apply_edits, execute
 from config.settings import get_settings
 from integrations.google import connections, oauth
@@ -70,6 +70,14 @@ def _to_outreach_error(exc: Exception, agent: str = "Sales & Outreach", timeout:
         return OutreachError(f"The agent didn't finish within {timeout:.0f}s", 504)
     logger.exception("Unexpected %s failure", agent)
     return OutreachError(f"Internal error running the {agent} agent", 500)
+
+
+async def _require_part(user_id: str, part: str) -> None:
+    """Sending needs Gmail connected and booking needs Google Calendar: each is
+    its own connection, which the user can disconnect on its own."""
+    connection = await connections.get_connection(user_id)
+    if not connection or not oauth.has(part, connection.scopes):
+        raise GoogleNotConnectedError(f"Connect {oauth.PART_NAMES[part]} on the Connect page first, then try again")
 
 
 async def _owned_request(user_id: str, request_id: str, agent_type: str) -> dict[str, Any]:
@@ -182,7 +190,7 @@ async def _run(
     token = await connections.get_access_token(config, user.id)
     connection = await connections.get_connection(user.id)
     if not connection or not connection.gmail:
-        raise GoogleNotConnectedError("Connect your Google account first so the agent can use Gmail and Calendar")
+        raise GoogleNotConnectedError("Connect Gmail on the Connect page first so the agent can draft and send emails")
 
     # Earlier turns of this chat: lets "email them" or "make it shorter"
     # resolve, and a Lead Research turn earlier in the chat supplies the leads.
@@ -212,7 +220,8 @@ async def _run(
             agent = SalesOutreachAgent(
                 llm=build_llm_client(settings),
                 gmail=GmailClient(token, client),
-                calendar=CalendarClient(token, client),
+                # Meetings are still drafted without Calendar, with a note to connect it.
+                calendar=CalendarClient(token, client) if connection.calendar else None,
                 max_actions=settings.outreach_max_actions,
                 on_step=progress.add_step,
                 is_cancelled=lambda: is_cancelled(request_id),
@@ -257,6 +266,7 @@ async def decide_action(
         else:
             try:
                 config = oauth.oauth_config(get_settings())
+                await _require_part(user.id, "calendar" if isinstance(updated, MeetingAction) else "gmail")
                 token = await connections.get_access_token(config, user.id)
                 async with httpx.AsyncClient(timeout=20.0) as client:
                     updated = await execute(
@@ -295,6 +305,7 @@ async def check_replies(user: AuthUser, request_id: str) -> dict[str, Any]:
         try:
             settings = get_settings()
             config = oauth.oauth_config(settings)
+            await _require_part(user.id, "gmail")
             token = await connections.get_access_token(config, user.id)
             ctx = OutreachContext(
                 instruction="Check for replies",
@@ -305,11 +316,7 @@ async def check_replies(user: AuthUser, request_id: str) -> dict[str, Any]:
                 company=await _company(user.id),
             )
             async with httpx.AsyncClient(timeout=20.0) as client:
-                agent = SalesOutreachAgent(
-                    llm=build_llm_client(settings),
-                    gmail=GmailClient(token, client),
-                    calendar=CalendarClient(token, client),
-                )
+                agent = SalesOutreachAgent(llm=build_llm_client(settings), gmail=GmailClient(token, client), calendar=None)
                 checks, drafts = await agent.check_replies(ctx, sent, result.actions, result)
         except Exception as exc:  # noqa: BLE001 - mapped to a user-facing message
             raise _to_outreach_error(exc) from exc

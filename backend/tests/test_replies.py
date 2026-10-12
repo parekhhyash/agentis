@@ -133,7 +133,14 @@ def stored(monkeypatch):
                         google_oauth_client_secret="s", integrations_encryption_key="kR3s1Yq4b2m6fJx0QeW8pZt7uVa5sDc9gHn1jLk2mN4=")
     monkeypatch.setattr(supabase_rest, "select_one", select_one)
     monkeypatch.setattr(supabase_rest, "update", update)
+    async def connection(user_id):
+        from integrations.google import oauth
+        from integrations.google.connections import GoogleConnection
+
+        return GoogleConnection(USER.id, ME, list(oauth.REQUIRED_GMAIL_SCOPES), None)
+
     monkeypatch.setattr(connections, "get_access_token", token)
+    monkeypatch.setattr(connections, "get_connection", connection)
     monkeypatch.setattr(outreach_runner, "get_settings", lambda: settings)
     monkeypatch.setattr(outreach_runner, "build_llm_client", lambda s: FakeLLM())
     monkeypatch.setattr(outreach_runner, "GmailClient", lambda token, client: FakeGmail())

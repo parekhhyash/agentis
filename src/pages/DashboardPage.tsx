@@ -9,13 +9,22 @@ import ScheduledPanel from '../components/dashboard/ScheduledPanel'
 import TaskComposer from '../components/dashboard/TaskComposer'
 import { ClockIcon, CloseIcon, MenuIcon, PlugIcon, PlusIcon } from '../components/icons'
 import ThemeToggle from '../components/ThemeToggle'
-import { createAgentRequest, RUNNABLE_AGENTS, startAgentRun, stopAgentRun, subscribeToRuns } from '../lib/agentRuns'
+import {
+  createAgentRequest,
+  isPlanActive,
+  runHandoffs,
+  RUNNABLE_AGENTS,
+  startAgentRun,
+  stopAgentRun,
+  subscribeToRuns,
+  type AgentRunOptions,
+} from '../lib/agentRuns'
 import type { AgentType } from '../lib/agentTypes'
 import { useAuth } from '../lib/AuthContext'
 import { createConversation, type Conversation } from '../lib/conversations'
 import type { Json, Tables } from '../lib/database.types'
 import type { Attachment } from '../lib/dataTypes'
-import { isGeneralResult } from '../lib/generalTypes'
+import { handoffsOf, isGeneralResult, planOf } from '../lib/generalTypes'
 import { useSocialConnections } from '../lib/content'
 import { CRM_NAMES, useCrmConnections, type CrmProvider } from '../lib/crm'
 import { useGoogleConnection } from '../lib/googleConnection'
@@ -35,6 +44,13 @@ const CLIENT_SIDE_FAILURE_MESSAGES = new Set([CLIENT_TIMEOUT_MESSAGE, STOPPED_BY
 // timeout is still worth re-checking until the backend has had its full
 // window to write its own final answer.
 const CLIENT_SIDE_FAILURE_GRACE_MS = 1_250_000
+
+// What each Google part is for, shown after connecting it.
+const GOOGLE_CONNECTED: Record<string, string> = {
+  gmail: 'Gmail connected. Sales & Outreach can now draft and send email for you.',
+  calendar: 'Google Calendar connected. Sales & Outreach can now book meetings with Meet links.',
+  sheets: 'Google Sheets connected. Add a sheet under Data files, or export leads and report tables to Sheets.',
+}
 
 export default function DashboardPage() {
   const { user } = useAuth()
@@ -65,17 +81,15 @@ export default function DashboardPage() {
   const googleResult = searchParams.get('google')
   const returnMessage = searchParams.get('message')
   const [handledGoogleResult, setHandledGoogleResult] = useState<string | null>(null)
-  const forSheets = searchParams.get('for') === 'sheets'
+  const googlePart = searchParams.get('for') ?? 'gmail'
   if (googleResult && googleResult !== handledGoogleResult) {
     setHandledGoogleResult(googleResult)
-    if (!forSheets) setAgentType('sales_outreach')
+    if (googlePart !== 'sheets') setAgentType('sales_outreach')
     setView('connect')
     setNotice(
       googleResult !== 'connected'
         ? { tone: 'error', text: returnMessage ?? 'Google could not be connected.' }
-        : forSheets
-          ? { tone: 'ok', text: 'Google Sheets connected. Add a sheet under Data files, or export leads and report tables to Sheets.' }
-          : { tone: 'ok', text: 'Google connected. Sales & Outreach can now draft email and meetings for you.' },
+        : { tone: 'ok', text: GOOGLE_CONNECTED[googlePart] ?? GOOGLE_CONNECTED.gmail },
     )
   }
   // Back from a CRM's sign-in page (see api/crm.py's callback).
@@ -294,19 +308,22 @@ export default function DashboardPage() {
     // fire-and-forget: status updates flow back via updateRequest.
     void startAgentRun(
       data,
-      {
-        companyContext: {
-          company_name: profile?.company_name,
-          company_website: profile?.company_website,
-          industry: profile?.industry,
-          target_audience_location: profile?.target_audience_location,
-          company_description: profile?.company_description,
-        },
-        senderName: profile?.full_name,
-        leadRequestId: agent === 'sales_outreach' ? leadRequestId : null,
-      },
+      { ...runOptions(), leadRequestId: agent === 'sales_outreach' ? leadRequestId : null },
       (patch) => updateRequest(data.id, patch),
     )
+  }
+
+  function runOptions(): AgentRunOptions {
+    return {
+      companyContext: {
+        company_name: profile?.company_name,
+        company_website: profile?.company_website,
+        industry: profile?.industry,
+        target_audience_location: profile?.target_audience_location,
+        company_description: profile?.company_description,
+      },
+      senderName: profile?.full_name,
+    }
   }
 
   function mergeOutreachAction(requestId: string, action: OutreachAction) {
@@ -386,10 +403,22 @@ export default function DashboardPage() {
     }
     return undefined
   }
-  // A turn the General agent created by handing its message to a specialist.
-  const handedOff = (turn: AgentRequest, index: number) => {
-    const previous: unknown = thread[index - 1]?.result
-    return isGeneralResult(previous) && previous.route === turn.agent_type && previous.task === turn.prompt
+  // General's plans in this chat (the agents each message went to, in order)
+  // and the turns that ran them, which show as hand-offs, not user messages.
+  const plans = new Map<string, NonNullable<ReturnType<typeof planOf>>>()
+  const handoffSteps = new Map<string, { step: number; total: number }>()
+  thread.forEach((turn, index) => {
+    const plan = planOf(thread, index, isPlanActive(turn.id))
+    if (!plan) return
+    plans.set(turn.id, plan)
+    plan.turnIds.forEach((id, i) => handoffSteps.set(id, { step: i + 1, total: plan.steps.length }))
+  })
+
+  function continuePlan(turn: AgentRequest, from: number) {
+    const result: unknown = turn.result
+    // Already running (a quick second click, say).
+    if (!isGeneralResult(result) || isPlanActive(turn.id)) return
+    void runHandoffs(turn, handoffsOf(result), from, runOptions())
   }
 
   return (
@@ -499,11 +528,14 @@ export default function DashboardPage() {
             />
           ) : thread.length > 0 ? (
             <div className="mx-auto max-w-3xl space-y-8 px-6 py-8">
-              {thread.map((turn, index) => (
+              {thread.map((turn) => (
                 <ChatConversation
                   key={turn.id}
                   request={turn}
-                  handedOff={handedOff(turn, index)}
+                  handedOff={handoffSteps.has(turn.id)}
+                  handoffStep={handoffSteps.get(turn.id)}
+                  plan={plans.get(turn.id)}
+                  onContinuePlan={(from) => continuePlan(turn, from)}
                   onOutreachActionChange={(action) => mergeOutreachAction(turn.id, action)}
                   onResultChange={(result) => updateRequest(turn.id, { result: result as Json })}
                   crms={crm.connected}
@@ -545,8 +577,8 @@ export default function DashboardPage() {
                 status={google.status}
                 error={google.error}
                 busy={google.busy}
-                onConnect={google.connect}
-                onDisconnect={google.disconnect}
+                onConnect={(part) => google.connect(part)}
+                onDisconnect={() => google.disconnect('gmail')}
                 leadRuns={leadRuns}
                 leadRequestId={leadRequestId}
                 onLeadRequestChange={setLeadRequestId}

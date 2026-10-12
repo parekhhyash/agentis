@@ -23,8 +23,8 @@ export interface ConnectorInfo {
   name: string
   description: string
   usedBy: string
-  // Logo image URLs: one, or two for a pair like Gmail and Calendar.
-  logos: string[]
+  // Logo image URL.
+  logo: string
   // A black mark (X, Notion, Medium), shown white on the dark-mode tile.
   monochrome?: boolean
   available: boolean
@@ -32,11 +32,19 @@ export interface ConnectorInfo {
 
 export const CONNECTORS: ConnectorInfo[] = [
   {
-    id: 'google',
-    name: 'Gmail & Google Calendar',
-    description: 'Send and reply to email from your Gmail, and book meetings with Google Meet links.',
+    id: 'gmail',
+    name: 'Gmail',
+    description: 'Draft, send and reply to email from your own Gmail, each one after you approve it.',
+    usedBy: 'Sales & Outreach, Operations',
+    logo: gmail,
+    available: true,
+  },
+  {
+    id: 'calendar',
+    name: 'Google Calendar',
+    description: 'Book meetings with Google Meet links, checked against your calendar for clashes.',
     usedBy: 'Sales & Outreach',
-    logos: [gmail, googleCalendar],
+    logo: googleCalendar,
     available: true,
   },
   {
@@ -45,7 +53,7 @@ export const CONNECTORS: ConnectorInfo[] = [
     description:
       'Add a sheet as a data file (read again whenever a report uses it), and export leads or report tables to a new sheet.',
     usedBy: 'Data & Reporting, Lead Research',
-    logos: [googleSheets],
+    logo: googleSheets,
     available: true,
   },
   {
@@ -53,7 +61,7 @@ export const CONNECTORS: ConnectorInfo[] = [
     name: 'HubSpot',
     description: 'Ask about contacts, companies and deals, and add or update records (you approve each change), through HubSpot\u2019s MCP server.',
     usedBy: 'General, Lead Research',
-    logos: [hubspot],
+    logo: hubspot,
     available: true,
   },
   {
@@ -62,7 +70,7 @@ export const CONNECTORS: ConnectorInfo[] = [
     description:
       'Query and update accounts, contacts and opportunities through Salesforce\u2019s hosted MCP server. Your Salesforce admin sets up a small app once (Connect shows how).',
     usedBy: 'General, Lead Research',
-    logos: [salesforce],
+    logo: salesforce,
     available: true,
   },
   {
@@ -70,7 +78,7 @@ export const CONNECTORS: ConnectorInfo[] = [
     name: 'Zoho CRM',
     description: 'Search and update leads, contacts and deals through your Zoho CRM MCP server (free from Zoho; no Agentis setup).',
     usedBy: 'General, Lead Research',
-    logos: [zoho],
+    logo: zoho,
     available: true,
   },
   {
@@ -78,7 +86,7 @@ export const CONNECTORS: ConnectorInfo[] = [
     name: 'LinkedIn',
     description: 'Drafted posts open in LinkedIn with the text filled in, ready to post from your own profile. Free, nothing to connect.',
     usedBy: 'Content & Copy',
-    logos: [linkedin],
+    logo: linkedin,
     available: true,
   },
   {
@@ -86,7 +94,7 @@ export const CONNECTORS: ConnectorInfo[] = [
     name: 'X (Twitter)',
     description: 'Drafted posts and threads open in X, ready to publish from your own account with one click. Free, nothing to connect.',
     usedBy: 'Content & Copy',
-    logos: [x],
+    logo: x,
     monochrome: true,
     available: true,
   },
@@ -95,7 +103,7 @@ export const CONNECTORS: ConnectorInfo[] = [
     name: 'Notion',
     description: 'Save any Content & Copy draft as a private page in your Notion workspace, ready to edit and share.',
     usedBy: 'Content & Copy',
-    logos: [notion],
+    logo: notion,
     monochrome: true,
     available: true,
   },
@@ -104,7 +112,7 @@ export const CONNECTORS: ConnectorInfo[] = [
     name: 'Medium',
     description: 'Save stories as drafts on Medium to publish from there. Needs an integration token made before 2025.',
     usedBy: 'Content & Copy',
-    logos: [medium],
+    logo: medium,
     monochrome: true,
     available: true,
   },
@@ -113,7 +121,7 @@ export const CONNECTORS: ConnectorInfo[] = [
     name: 'Outlook & Microsoft 365',
     description: 'Email and calendar for teams on Microsoft.',
     usedBy: 'Sales & Outreach',
-    logos: [microsoft],
+    logo: microsoft,
     available: false,
   },
   {
@@ -121,7 +129,7 @@ export const CONNECTORS: ConnectorInfo[] = [
     name: 'Slack',
     description: 'Get updates from your agents and hand them tasks from a channel.',
     usedBy: 'Every agent',
-    logos: [slack],
+    logo: slack,
     available: false,
   },
 ]

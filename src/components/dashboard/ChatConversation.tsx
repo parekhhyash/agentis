@@ -4,7 +4,7 @@ import { isContentResult, type useSocialConnections } from '../../lib/content'
 import type { CrmProviderStatus } from '../../lib/crm'
 import { attachmentsOf, isDataReport } from '../../lib/dataTypes'
 import { relativeTime } from '../../lib/relativeTime'
-import { isGeneralResult } from '../../lib/generalTypes'
+import { isGeneralResult, type PlanStep } from '../../lib/generalTypes'
 import { isOperationsResult, type ScheduledTasks } from '../../lib/operations'
 import { isOutreachResult, type OutreachAction } from '../../lib/outreachTypes'
 import type { AgentProgress, AnyLeadResult } from '../../lib/salesAgentTypes'
@@ -25,6 +25,9 @@ type AgentRequest = Tables<'agent_requests'>
 export default function ChatConversation({
   request,
   handedOff = false,
+  handoffStep,
+  plan,
+  onContinuePlan,
   onOutreachActionChange,
   onResultChange,
   crms = [],
@@ -38,6 +41,11 @@ export default function ChatConversation({
 }: {
   request: AgentRequest
   handedOff?: boolean
+  // This turn's place in General's plan, when it had more than one step.
+  handoffStep?: { step: number; total: number }
+  // For a General turn: the agents it handed the message to and how far they got.
+  plan?: { steps: PlanStep[]; next: number | null } | null
+  onContinuePlan?: (from: number) => void
   onOutreachActionChange?: (action: OutreachAction) => void
   onResultChange?: (result: unknown) => void
   // Connected CRMs, for "Add to HubSpot" on lead results.
@@ -74,6 +82,12 @@ export default function ChatConversation({
         <div className="flex items-start gap-3 rounded-xl border border-dashed border-slate-300 px-4 py-3">
           <span className="mt-0.5 shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap text-slate-600">
             General &rarr; {AGENT_LABELS[request.agent_type]}
+            {handoffStep && handoffStep.total > 1 && (
+              <span className="font-normal text-slate-500">
+                {' '}
+                &middot; step {handoffStep.step} of {handoffStep.total}
+              </span>
+            )}
           </span>
           <div className="min-w-0">
             <p className="text-sm text-slate-600">{request.prompt}</p>
@@ -126,6 +140,8 @@ export default function ChatConversation({
                 result={request.result}
                 requestId={request.id}
                 onResultChange={(result) => onResultChange?.(result)}
+                plan={plan}
+                onContinue={onContinuePlan}
               />
             ) : isContentResult(request.result) && social ? (
               <ContentResultPanel

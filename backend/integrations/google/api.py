@@ -8,7 +8,7 @@ from integrations.google.errors import GoogleAPIError, GoogleAuthExpiredError
 class GoogleApi:
     """Thin authenticated JSON client shared by the Gmail and Calendar wrappers."""
 
-    def __init__(self, access_token: str, client: httpx.AsyncClient, base_url: str, *, permission: str = "Gmail and Calendar"):
+    def __init__(self, access_token: str, client: httpx.AsyncClient, base_url: str, *, permission: str = "Gmail"):
         self._token = access_token
         self._client = client
         self._base = base_url

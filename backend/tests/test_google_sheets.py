@@ -112,7 +112,7 @@ def test_sheets_sign_in_asks_only_for_sheets_and_remembers_why():
     assert oauth.SHEETS_READ in scopes and oauth.DRIVE_FILE in scopes and oauth.GMAIL_SEND not in scopes
     assert oauth.read_state(state, KEY) == {**oauth.read_state(state, KEY), "u": USER.id, "p": "sheets"}
     assert oauth.verify_state(oauth.sign_state(USER.id, KEY), KEY) == USER.id
-    both = GoogleConnection(USER.id, "me@x.com", [*oauth.REQUIRED_SCOPES, *oauth.REQUIRED_SHEETS_SCOPES], None)
+    both = GoogleConnection(USER.id, "me@x.com", [*oauth.REQUIRED_GMAIL_SCOPES, *oauth.REQUIRED_SHEETS_SCOPES], None)
     sheets_only = GoogleConnection(USER.id, "me@x.com", list(oauth.REQUIRED_SHEETS_SCOPES), None)
     assert both.gmail and both.sheets and sheets_only.sheets and not sheets_only.gmail
 
@@ -179,12 +179,33 @@ def test_callback_checks_the_scopes_asked_for_and_the_account(google_api):
     state["grant_scopes"] = ["openid", "email", *oauth.REQUIRED_SHEETS_SCOPES]
     assert "google=connected" in _callback(client, "sheets") and state["saved"][0] == "me@agentis.app"
     # Gmail already connected as another account: refuse rather than replace it.
-    state["connection"] = GoogleConnection(USER.id, "boss@agentis.app", list(oauth.REQUIRED_SCOPES), None)
+    state["connection"] = GoogleConnection(USER.id, "boss@agentis.app", list(oauth.REQUIRED_GMAIL_SCOPES), None)
     state["saved"] = None
     assert "boss%40agentis.app" in _callback(client, "sheets") and state["saved"] is None
-    # Gmail sign-in still needs Gmail and Calendar.
+    # Gmail sign-in still needs Gmail.
     state["connection"], state["grant_scopes"] = None, ["openid", "email", oauth.GMAIL_SEND]
-    assert "Gmail+and+Calendar" in _callback(client)
+    assert "allow+Gmail+access" in _callback(client)
+    # Calendar is its own sign-in, and returns to the app marked as such.
+    state["grant_scopes"] = ["openid", "email", oauth.CALENDAR_EVENTS]
+    assert "google=connected" in _callback(client, "calendar") and "for=calendar" in _callback(client, "calendar")
+    state["grant_scopes"] = ["openid", "email", oauth.GMAIL_SEND, oauth.GMAIL_READ]
+    assert "allow+Google+Calendar+access" in _callback(client, "calendar")
+
+
+def test_gmail_calendar_and_sheets_are_separate_parts(google_api):
+    client, state = google_api
+    gmail_url = client.get("/integrations/google/auth-url").json()["url"]
+    calendar_url = client.get("/integrations/google/auth-url", params={"part": "calendar"}).json()["url"]
+    assert "gmail.send" in gmail_url and "calendar.events" not in gmail_url
+    assert "calendar.events" in calendar_url and "gmail" not in calendar_url
+    assert oauth.read_state(parse_qs(urlparse(calendar_url).query)["state"][0], KEY)["p"] == "calendar"
+    # Grants from before the split hold Gmail and Calendar together: both stay connected.
+    state["connection"] = GoogleConnection(USER.id, "me@agentis.app", [*oauth.REQUIRED_GMAIL_SCOPES, oauth.CALENDAR_EVENTS], None)
+    status = client.get("/integrations/google/status").json()
+    assert (status["connected"], status["calendar"], status["sheets"]) == (True, True, False)
+    state["connection"] = GoogleConnection(USER.id, "me@agentis.app", list(oauth.REQUIRED_CALENDAR_SCOPES), None)
+    status = client.get("/integrations/google/status").json()
+    assert (status["connected"], status["calendar"]) == (False, True)
 
 
 def test_status_and_auth_url_for_sheets(google_api):
@@ -212,7 +233,7 @@ def test_export_creates_a_sheet_only_with_sheets_connected(google_api):
 def test_disconnecting_one_part_keeps_the_other_and_the_last_part_revokes(monkeypatch):
     from integrations.google import connections
 
-    both = ["openid", "email", *oauth.REQUIRED_SCOPES, *oauth.REQUIRED_SHEETS_SCOPES]
+    both = ["openid", "email", *oauth.REQUIRED_GMAIL_SCOPES, *oauth.REQUIRED_SHEETS_SCOPES]
     row: dict[str, Any] = {"scopes": both}
     calls: list[Any] = []
 
@@ -234,6 +255,7 @@ def test_disconnecting_one_part_keeps_the_other_and_the_last_part_revokes(monkey
     asyncio.run(connections.remove_part(None, USER.id, "sheets"))
     left = GoogleConnection(USER.id, "me@x.com", row["scopes"], None)
     assert left.gmail and not left.sheets and calls == [("update", row["scopes"])]
+    # (Calendar was never connected here, so Gmail is the last part.)
     # Gmail was the last part: the whole grant goes, revoked at Google.
     asyncio.run(connections.remove_part(None, USER.id, "gmail"))
     assert calls[-1] == ("revoke",) and row["scopes"] is None
@@ -255,7 +277,7 @@ def test_disconnect_endpoint_takes_a_part(google_api, monkeypatch):
 
     async def remove_part(config, user_id, part):
         removed.append(part)
-        state["connection"] = GoogleConnection(USER.id, "me@agentis.app", list(oauth.REQUIRED_SCOPES), None)
+        state["connection"] = GoogleConnection(USER.id, "me@agentis.app", list(oauth.REQUIRED_GMAIL_SCOPES), None)
 
     async def delete_connection(config, user_id):
         removed.append("all")
@@ -263,8 +285,8 @@ def test_disconnect_endpoint_takes_a_part(google_api, monkeypatch):
 
     monkeypatch.setattr(api_module.connections, "remove_part", remove_part)
     monkeypatch.setattr(api_module.connections, "delete_connection", delete_connection)
-    assert client.delete("/integrations/google", params={"part": "sheets"}).json() == {"connected": True, "sheets": False}
-    assert client.delete("/integrations/google").json() == {"connected": False, "sheets": False}
+    assert client.delete("/integrations/google", params={"part": "sheets"}).json() == {"connected": True, "calendar": False, "sheets": False}
+    assert client.delete("/integrations/google").json() == {"connected": False, "calendar": False, "sheets": False}
     assert client.delete("/integrations/google", params={"part": "drive"}).status_code == 422
     assert removed == ["sheets", "all"]
 
@@ -357,7 +379,7 @@ def test_reports_read_stale_sheets_again_and_fall_back_with_a_note(sheet_store):
 
 def test_linking_needs_sheets_connected(sheet_store, monkeypatch):
     async def gmail_only(user_id):
-        return GoogleConnection(user_id, "me@agentis.app", list(oauth.REQUIRED_SCOPES), None)
+        return GoogleConnection(user_id, "me@agentis.app", list(oauth.REQUIRED_GMAIL_SCOPES), None)
 
     monkeypatch.setattr(data_runner.connections, "get_connection", gmail_only)
     with pytest.raises(OutreachError) as err:

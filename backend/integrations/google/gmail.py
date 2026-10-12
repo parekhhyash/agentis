@@ -159,7 +159,7 @@ def reply_subject(subject: str) -> str:
 
 class GmailClient:
     def __init__(self, access_token: str, client: httpx.AsyncClient):
-        self._api = GoogleApi(access_token, client, BASE_URL)
+        self._api = GoogleApi(access_token, client, BASE_URL, permission="Gmail")
 
     async def search_thread_ids(self, query: str, max_results: int) -> list[str]:
         data = await self._api.request("GET", "/threads", params={"q": query, "maxResults": max_results})

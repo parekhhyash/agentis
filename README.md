@@ -37,7 +37,7 @@ The system is built as a **React + TypeScript** frontend (Vite) paired with a **
 
 - **Lead Research Agent** — Discovers, filters, deeply researches, and qualifies companies as potential sales leads using Exa search and LLM analysis
 - **Sales & Outreach Agent** — Drafts personalized emails, thread-aware replies, and calendar invitations using the user's connected Gmail and Google Calendar
-- **General Agent** — The default chat agent: answers questions with company and conversation context, or hands the task to the right specialist
+- **General Agent** — The default chat agent: answers questions with company and conversation context, or hands the task to the right specialist. A message that needs several agents in order ("find 10 bakeries in Pune and email their owners", "report last month's sales and write a LinkedIn post about it", "find leads and add them to HubSpot") becomes a plan of up to 3 steps: each runs as its own turn of the chat once the one before it succeeded (Lead Research must find at least one lead), and reads the chat, so it works on the earlier results. The General turn shows the plan and each step's status, and offers to continue a plan that was interrupted (say, by a reload). Emails and CRM changes still wait for approval. Scheduled tasks run General's plans the same way
 - **CRM integrations over MCP** — Connect **HubSpot**, **Salesforce** or **Zoho CRM** through their official MCP servers, all free to integrate, each person with their own account. Ask General about contacts, companies and deals, ask it to update records, or add researched leads with one click. Lookups run on their own; every change is a draft you approve; delete and merge tools are never used
 - **Google Sheets** — Link a sheet as a data file for Data & Reporting (read again whenever a report or a scheduled run uses it), and export researched leads or any report table to a new sheet, through the same Agentis Google sign-in as Gmail
 - **Data & Reporting Agent** — Answers questions about numbers with headline figures, charts and tables, from the user's Agentis activity (leads, emails, replies, meetings), CSV/Excel files they upload and Google Sheets they link. The model plans queries; the backend runs every calculation, and the written summary may only quote numbers that the queries produced
@@ -625,6 +625,8 @@ Run the Google connections migration:
    ```
 4. Set the relevant environment variables in `backend/.env`
 
+Gmail, Google Calendar and Google Sheets each have their own card on the Connect page and their own sign-in (incremental: each adds its scopes to the person's one Google grant, on the same account). Gmail asks for `gmail.send` and `gmail.readonly`, Calendar for `calendar.events`. Sales & Outreach needs Gmail; without Calendar it still drafts meetings, without a clash check, and booking one asks to connect Calendar first. Grants made before the split hold both, so those users have Gmail and Calendar connected.
+
 **Google Sheets** uses the same OAuth client. In the same Google Cloud project, enable the **Google Sheets API** and add the scopes `spreadsheets.readonly` and `drive.file` to the consent screen. Both are free. People connect Sheets on its own card; it adds the two scopes to their Google sign-in (same account as Gmail, or Sheets alone). `drive.file` only reaches spreadsheets Agentis creates, and `spreadsheets.readonly` reads the sheets people link. Run `supabase/migrations/20261014010000_google_sheets_datasets.sql`. The Sheets API isn't on by default: until it's enabled, Google refuses every call and Agentis says so. Google's own Sheets MCP server (`sheetsmcp.googleapis.com`) isn't used: it's a Developer Preview whose terms don't allow public apps, and the plain Sheets API covers what Agentis needs.
 
 ### 6. CRM Setup (Optional — HubSpot, Salesforce, Zoho CRM)
@@ -823,7 +825,7 @@ The frontend runs at `http://localhost:5173` and the backend at `http://localhos
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| `POST` | `/general/run` | ✅ Bearer | Answer a message or route it to a specialist agent |
+| `POST` | `/general/run` | ✅ Bearer | Answer a message or route it to a specialist agent; `steps` lists up to 3 agents to run in order when the message needs several |
 | `POST` | `/data/run` | ✅ Bearer | Build a report (numbers, charts, tables) for a question |
 | `POST` | `/data/datasets` | ✅ Bearer | Upload a CSV/Excel file (base64) to be parsed and stored |
 | `POST` | `/data/sheets` | ✅ Bearer | Link one tab of a Google Sheet (`{url}`) as a data file; the same tab again updates it |
@@ -858,11 +860,11 @@ The frontend runs at `http://localhost:5173` and the backend at `http://localhos
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| `GET` | `/integrations/google/status` | ✅ Bearer | Check Google connection status |
-| `GET` | `/integrations/google/auth-url` | ✅ Bearer | Get Google OAuth consent URL (`?sheets=true` for Google Sheets) |
+| `GET` | `/integrations/google/status` | ✅ Bearer | Which parts are connected (`connected` for Gmail, `calendar`, `sheets`) and the account |
+| `GET` | `/integrations/google/auth-url` | ✅ Bearer | Get the Google consent URL for one part (`?part=gmail`, `calendar` or `sheets`) |
 | `POST` | `/integrations/google/sheets` | ✅ Bearer | Create a Google Sheet from `{title, tab, headers, rows}`; returns its link |
 | `GET` | `/integrations/google/callback` | ❌ | OAuth callback (internal) |
-| `DELETE` | `/integrations/google` | ✅ Bearer | Disconnect Gmail and Calendar (`?part=gmail`), Google Sheets (`?part=sheets`) or the whole Google account (no part). Google can't take back single permissions, so Agentis stops using that part; the grant is revoked once neither part is left |
+| `DELETE` | `/integrations/google` | ✅ Bearer | Disconnect Gmail, Google Calendar or Google Sheets (`?part=`), or the whole Google account (no part). Google can't take back single permissions, so Agentis stops using that part; the grant is revoked once no part is left |
 
 ---
 

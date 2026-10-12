@@ -49,6 +49,78 @@ def test_general_routes_with_a_standalone_task_and_rejects_unknown_agents():
     assert unknown.route == "none" and unknown.task == ""
 
 
+def test_general_can_plan_several_agents_in_order():
+    steps = [
+        {"agent": "lead_research", "task": "Find 10 bakeries in Pune with owners' emails"},
+        {"agent": "sales_outreach", "task": "Email the owners of the bakeries found in the previous step of this chat"},
+    ]
+    chained, _ = _run({"route": "lead_research", "task": "ignored", "steps": steps, "reply": "Lead Research, then Sales & Outreach."})
+    assert [(s.agent, s.task) for s in chained.steps] == [(s["agent"], s["task"]) for s in steps]
+    # route and task always match the first step.
+    assert (chained.route, chained.task) == ("lead_research", steps[0]["task"])
+
+    # One step is a plain hand-off; more than three are cut to three.
+    single, _ = _run({"route": "content_copy", "task": "Write a post", "steps": [{"agent": "content_copy", "task": "Write a post"}], "reply": "ok"})
+    assert single.steps == [] and single.route == "content_copy"
+    many, _ = _run({"route": "data_reporting", "task": "x", "steps": [{"agent": "data_reporting", "task": f"t{i}"} for i in range(5)], "reply": "ok"})
+    assert len(many.steps) == 3
+
+    # A step that can't run drops the plan: unknown agents, scheduling, a CRM
+    # that isn't connected, or a missing task.
+    for bad in ({"agent": "customer_support", "task": "x"}, {"agent": "operations", "task": "x"}, {"agent": "crm", "task": "x"}, {"agent": "content_copy"}):
+        dropped, _ = _run({"route": "lead_research", "task": "Find leads", "steps": [steps[0], bad], "reply": "ok"})
+        assert dropped.steps == [] and dropped.route == "lead_research" and dropped.task == "Find leads"
+
+
+def test_a_crm_step_is_allowed_once_a_crm_is_connected():
+    llm = FakeLLM({"route": "lead_research", "steps": [
+        {"agent": "lead_research", "task": "Find 5 D2C brands"}, {"agent": "crm", "task": "Add the leads from the previous step to HubSpot"},
+    ], "reply": "ok"})
+    result = asyncio.run(GeneralAgent(llm).run(message="m", history="", company={}, user_name="", today=NOW, crms=["HubSpot"]))
+    assert [s.agent for s in result.steps] == ["lead_research", "crm"]
+
+
+def test_a_leading_crm_step_runs_in_the_turn_and_the_rest_follow(monkeypatch):
+    from agents.general.agent import GeneralResult, Handoff
+    from services import general_runner
+    from services.auth import AuthUser
+
+    plan = GeneralResult(reply="ok", route="crm", task="Find Acme's contacts in HubSpot", steps=[
+        Handoff(agent="crm", task="Find Acme's contacts in HubSpot"),
+        Handoff(agent="sales_outreach", task="Email the Acme contacts found above"),
+    ])
+
+    class Agent:
+        def __init__(self, llm):
+            pass
+
+        async def run(self, **kwargs):
+            return plan.model_copy(deep=True)
+
+    async def nothing(*args, **kwargs):
+        return None
+
+    async def context(user_id, request_id):
+        return conversation_context.ConversationContext()
+
+    async def crm(user, **kwargs):
+        return "Acme has 2 contacts", None
+
+    async def no_crms(user_id):
+        return ["hubspot"]
+
+    monkeypatch.setattr(general_runner, "GeneralAgent", Agent)
+    monkeypatch.setattr(general_runner, "build_llm_client", lambda settings: None)
+    monkeypatch.setattr(general_runner, "load_context", context)
+    monkeypatch.setattr(general_runner, "connected_providers", no_crms)
+    monkeypatch.setattr(general_runner, "run_crm", crm)
+    monkeypatch.setattr(general_runner, "finalize_request", nothing)
+    result = asyncio.run(general_runner.run_general(AuthUser(id=USER_ID, email=None), prompt="p", request_id=None, company_context={}, user_name=""))
+    assert result.reply == "Acme has 2 contacts"
+    assert (result.route, result.task) == ("sales_outreach", "Email the Acme contacts found above")
+    assert [s.agent for s in result.steps] == ["sales_outreach"]
+
+
 def test_summaries_cover_each_agent():
     leads = conversation_context.summarize(
         {"agent_type": "lead_research", "status": "completed", "result": {"leads": [

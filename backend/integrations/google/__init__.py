@@ -1,1 +1,1 @@
-"""Google account connection (OAuth), Gmail and Google Calendar clients."""
+"""Google account connection (OAuth), and Gmail, Google Calendar and Google Sheets clients."""

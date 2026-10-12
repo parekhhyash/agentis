@@ -12,7 +12,7 @@ import type { AgentType } from './agentTypes'
 import { authedFetch, BackendApiError } from './backendApi'
 import type { Json, Tables } from './database.types'
 import { attachmentsOf, type Attachment, type DataReportResult } from './dataTypes'
-import type { GeneralResult } from './generalTypes'
+import { handoffsOf, stepSucceeded, turnAgentOf, type GeneralResult, type Handoff } from './generalTypes'
 import { runOutreach } from './outreachApi'
 import {
   cancelLeadsGeneration,
@@ -26,6 +26,14 @@ import { supabase } from './supabase'
 type AgentRequest = Tables<'agent_requests'>
 
 const abortControllers = new Map<string, AbortController>()
+
+// General turns whose steps this page is running now, so the chat doesn't
+// offer to continue a plan that is already moving.
+const activePlans = new Set<string>()
+
+export function isPlanActive(generalId: string): boolean {
+  return activePlans.has(generalId)
+}
 
 // Runs can start other runs (the General agent handing a task to a
 // specialist), possibly after the component that started them unmounted, so
@@ -278,27 +286,50 @@ export async function runGeneralAgent(
     abortControllers.delete(request.id)
   }
 
+  const handoffs = handoffsOf(result)
+  if (handoffs.length && request.conversation_id) activePlans.add(request.id)
   await supabase
     .from('agent_requests')
     .update({ status: 'completed', result: result as unknown as Json, error: null })
     .eq('id', request.id)
   update({ status: 'completed', result: result as unknown as Json, error: null })
 
-  if (result.route === 'none' || !request.conversation_id) return
-  // Files attached to the message go with it to the specialist.
-  const next = await createAgentRequest(
-    request.user_id,
-    result.route,
-    result.task,
-    request.conversation_id,
-    attachmentsOf(request.attachments),
-  )
-  if (!next) return
-  emit({ type: 'spawn', request: next })
-  // The specialist picks up leads from earlier in the chat on the backend.
-  void startAgentRun(next, { ...options, leadRequestId: null }, (patch) =>
-    emit({ type: 'update', id: next.id, patch }),
-  )
+  await runHandoffs(request, handoffs, 0, options)
+}
+
+// Runs a General turn's handoffs from step `from` on, each as the next turn
+// of the chat and only once the one before it succeeded. Each agent reads the
+// chat, so it sees what the earlier steps found (Sales & Outreach picks up
+// the leads on the backend).
+export async function runHandoffs(
+  general: AgentRequest,
+  handoffs: Handoff[],
+  from: number,
+  options: AgentRunOptions,
+): Promise<void> {
+  if (!general.conversation_id) return
+  activePlans.add(general.id)
+  try {
+    for (const [i, handoff] of handoffs.entries()) {
+      if (i < from) continue
+      // Files attached to the message go to the first step, and to any step
+      // that works on data.
+      const files = i === 0 || handoff.agent === 'data_reporting' ? attachmentsOf(general.attachments) : []
+      const next = await createAgentRequest(general.user_id, turnAgentOf(handoff.agent), handoff.task, general.conversation_id, files)
+      if (!next) return
+      emit({ type: 'spawn', request: next })
+      let latest: AgentRequest = next
+      await startAgentRun(next, { ...options, leadRequestId: null }, (patch) => {
+        latest = { ...latest, ...patch }
+        emit({ type: 'update', id: next.id, patch })
+      })
+      if (!stepSucceeded(latest)) return
+    }
+  } finally {
+    activePlans.delete(general.id)
+    // Lets the chat re-check the plan now that nothing is running it.
+    emit({ type: 'update', id: general.id, patch: {} })
+  }
 }
 
 // Agents with a real backend behind them; the rest stay queued for now.

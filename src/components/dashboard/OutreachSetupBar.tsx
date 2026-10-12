@@ -1,12 +1,12 @@
 import type { Tables } from '../../lib/database.types'
-import type { GoogleStatus } from '../../lib/googleConnection'
+import type { GooglePart, GoogleStatus } from '../../lib/googleConnection'
 import { GoogleIcon } from '../icons'
 
 type AgentRequest = Tables<'agent_requests'>
 
-// Sits above the composer while Sales & Outreach is selected: the Google
-// account the agent sends from, and optionally a past lead research run whose
-// contacts it may write to.
+// Sits above the composer while Sales & Outreach is selected: the Gmail
+// account the agent sends from (and whether Calendar is there for meetings),
+// and optionally a past lead research run whose contacts it may write to.
 export default function OutreachSetupBar({
   status,
   error,
@@ -20,7 +20,7 @@ export default function OutreachSetupBar({
   status: GoogleStatus | null
   error: string | null
   busy: boolean
-  onConnect: () => void
+  onConnect: (part: GooglePart) => void
   onDisconnect: () => void
   leadRuns: AgentRequest[]
   leadRequestId: string | null
@@ -46,17 +46,17 @@ export default function OutreachSetupBar({
     return (
       <div className="mb-3 flex flex-col gap-3 rounded-xl border border-slate-200 bg-surface px-4 py-3 sm:flex-row sm:items-center">
         <p className="flex-1 text-sm text-slate-600">
-          Connect Google so this agent can draft and send email from your Gmail and book meetings in your Calendar.
-          You approve everything before it's sent.
+          Connect Gmail so this agent can draft and send email from your own account. You approve everything
+          before it's sent.
         </p>
         <button
           type="button"
-          onClick={onConnect}
+          onClick={() => onConnect('gmail')}
           disabled={busy}
           className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-slate-300 bg-surface px-4 py-2 text-sm font-medium text-slate-800 transition-colors hover:bg-slate-50 disabled:opacity-50"
         >
           <GoogleIcon />
-          {busy ? 'Opening Google…' : 'Connect Google'}
+          {busy ? 'Opening Google…' : 'Connect Gmail'}
         </button>
       </div>
     )
@@ -77,6 +77,17 @@ export default function OutreachSetupBar({
         >
           Disconnect
         </button>
+        {!status.calendar && (
+          <button
+            type="button"
+            onClick={() => onConnect('calendar')}
+            disabled={busy}
+            title="Needed to book meetings"
+            className="shrink-0 text-xs font-medium text-sky-600 hover:underline"
+          >
+            Connect Calendar for meetings
+          </button>
+        )}
       </div>
       {leadRuns.length > 0 && (
         <label className="flex min-w-0 items-center gap-2 text-slate-600 sm:ml-auto">

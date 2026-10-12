@@ -1,12 +1,12 @@
-"""Connecting the user's Google account (Gmail + Calendar, and Google Sheets),
-and creating Google Sheets from the app's tables.
+"""Connecting the user's Google account (Gmail, Google Calendar and Google
+Sheets, each on its own), and creating Google Sheets from the app's tables.
 
 Flow: the web app calls GET /integrations/google/auth-url with the user's
-Supabase session (`?sheets=true` for Google Sheets), sends the browser to the
-returned Google consent URL, Google redirects to /integrations/google/callback,
-and the callback stores the grant and sends the browser back to the dashboard.
-Sign-ins are incremental: connecting Sheets keeps Gmail and Calendar, and the
-other way round, as long as it's the same Google account.
+Supabase session (`?part=calendar` or `?part=sheets`; Gmail by default), sends
+the browser to the returned Google consent URL, Google redirects to
+/integrations/google/callback, and the callback stores the grant and sends the
+browser back to the dashboard. Sign-ins are incremental: connecting one part
+keeps the others, as long as it's the same Google account.
 """
 
 import logging
@@ -35,10 +35,13 @@ def _config() -> oauth.OAuthConfig:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
-def _back_to_app(status: str, message: str | None = None, sheets: bool = False) -> RedirectResponse:
+Part = Literal["gmail", "calendar", "sheets"]
+
+
+def _back_to_app(status: str, message: str | None = None, part: str = "gmail") -> RedirectResponse:
     params = {"google": status}
-    if sheets:
-        params["for"] = "sheets"
+    if part != "gmail":
+        params["for"] = part
     if message:
         params["message"] = message
     # The app uses a HashRouter, so the route and its query live after '#'.
@@ -55,8 +58,9 @@ async def google_status(user: AuthUser = Depends(current_user)) -> dict:
     connection = await connections.get_connection(user.id) if configured else None
     return {
         "configured": configured,
-        # Gmail and Calendar are allowed; Sheets has its own flag.
+        # Gmail; Calendar and Sheets have flags of their own.
         "connected": bool(connection and connection.gmail),
+        "calendar": bool(connection and connection.calendar),
         "sheets": bool(connection and connection.sheets),
         "email": connection.email if connection else None,
         "scopes": connection.scopes if connection else [],
@@ -64,13 +68,14 @@ async def google_status(user: AuthUser = Depends(current_user)) -> dict:
 
 
 @router.get("/auth-url")
-async def google_auth_url(sheets: bool = False, user: AuthUser = Depends(current_user)) -> dict:
+async def google_auth_url(part: Part = "gmail", sheets: bool = False, user: AuthUser = Depends(current_user)) -> dict:
     config = _config()
+    part = "sheets" if sheets else part  # `?sheets=true` from before parts
     connection = await connections.get_connection(user.id)
-    state = oauth.sign_state(user.id, config.secret_key, purpose="sheets" if sheets else "")
-    # The account already connected comes first, so both stay on one grant.
+    state = oauth.sign_state(user.id, config.secret_key, purpose="" if part == "gmail" else part)
+    # The account already connected comes first, so every part stays on one grant.
     hint = connection.email if connection else user.email
-    return {"url": oauth.build_auth_url(config, state, login_hint=hint, scopes=oauth.SHEETS_SCOPES if sheets else None)}
+    return {"url": oauth.build_auth_url(config, state, login_hint=hint, scopes=oauth.ASKED_FOR[part])}
 
 
 @router.get("/callback", include_in_schema=False)
@@ -82,23 +87,22 @@ async def google_callback(code: str | None = None, state: str | None = None, err
     try:
         config = oauth.oauth_config(get_settings())
         payload = oauth.read_state(state, config.secret_key)
-        user_id, for_sheets = str(payload["u"]), payload.get("p") == "sheets"
+        user_id = str(payload["u"])
+        part = payload.get("p") if payload.get("p") in oauth.PARTS else "gmail"
         async with httpx.AsyncClient(timeout=15.0) as client:
             grant = await oauth.exchange_code(config, code, client)
-            if for_sheets and not oauth.has_sheets(grant.scopes):
-                return _back_to_app("error", "Please allow Google Sheets access (tick every box on Google's screen) and try again", True)
-            if not for_sheets and not oauth.has_gmail(grant.scopes):
+            if not oauth.has(part, grant.scopes):
                 return _back_to_app(
-                    "error", "Please allow Gmail and Calendar access (tick every box on Google's screen) and try again"
+                    "error", f"Please allow {oauth.PART_NAMES[part]} access (tick every box on Google's screen) and try again", part
                 )
             if not grant.refresh_token:
-                return _back_to_app("error", "Google didn't return offline access, try connecting again", for_sheets)
+                return _back_to_app("error", "Google didn't return offline access, try connecting again", part)
             email = await oauth.fetch_email(grant.access_token, client)
         existing = await connections.get_connection(user_id)
         if existing and existing.email.lower() != email.lower():
             # One Google grant per user: a second account would replace the first.
             return _back_to_app(
-                "error", f"Use the Google account you already connected ({existing.email}), or disconnect it first", for_sheets
+                "error", f"Use the Google account you already connected ({existing.email}), or disconnect it first", part
             )
         await connections.save_connection(config, user_id, email, grant.scopes, grant.refresh_token)
     except GoogleIntegrationError as exc:
@@ -106,13 +110,13 @@ async def google_callback(code: str | None = None, state: str | None = None, err
     except Exception:  # noqa: BLE001
         logger.exception("Google OAuth callback failed")
         return _back_to_app("error", "Something went wrong connecting Google")
-    return _back_to_app("connected", sheets=for_sheets)
+    return _back_to_app("connected", part=part)
 
 
 @router.delete("")
-async def google_disconnect(part: Literal["gmail", "sheets"] | None = None, user: AuthUser = Depends(current_user)) -> dict:
-    """Disconnects Gmail and Calendar (`?part=gmail`), Google Sheets
-    (`?part=sheets`), or the whole Google account (no part)."""
+async def google_disconnect(part: Part | None = None, user: AuthUser = Depends(current_user)) -> dict:
+    """Disconnects Gmail, Google Calendar or Google Sheets (`?part=`), or the
+    whole Google account (no part)."""
     try:
         config = oauth.oauth_config(get_settings())
     except GoogleConfigError:
@@ -122,7 +126,11 @@ async def google_disconnect(part: Literal["gmail", "sheets"] | None = None, user
     else:
         await connections.delete_connection(config, user.id)
     connection = await connections.get_connection(user.id)
-    return {"connected": bool(connection and connection.gmail), "sheets": bool(connection and connection.sheets)}
+    return {
+        "connected": bool(connection and connection.gmail),
+        "calendar": bool(connection and connection.calendar),
+        "sheets": bool(connection and connection.sheets),
+    }
 
 
 

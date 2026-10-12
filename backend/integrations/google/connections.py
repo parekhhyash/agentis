@@ -32,8 +32,11 @@ class GoogleConnection:
 
     @property
     def gmail(self) -> bool:
-        """Gmail and Calendar are allowed (a Sheets-only connection has neither)."""
         return oauth.has_gmail(self.scopes)
+
+    @property
+    def calendar(self) -> bool:
+        return oauth.has_calendar(self.scopes)
 
     @property
     def sheets(self) -> bool:
@@ -108,15 +111,15 @@ async def delete_connection(config: oauth.OAuthConfig | None, user_id: str) -> N
 
 
 async def remove_part(config: oauth.OAuthConfig | None, user_id: str, part: str) -> None:
-    """Stops Agentis using one part of the grant ("gmail": Gmail and Calendar,
-    or "sheets"). Google can't take back single permissions, so the other part
-    keeps the grant; once neither is left, the whole grant is revoked."""
+    """Stops Agentis using one part of the grant ("gmail", "calendar" or
+    "sheets"). Google can't take back single permissions, so the other parts
+    keep the grant; once none is left, the whole grant is revoked."""
     row = await _row(user_id)
     if not row:
         return
-    dropped = oauth.REQUIRED_SCOPES if part == "gmail" else oauth.REQUIRED_SHEETS_SCOPES
+    dropped = oauth.REQUIRED[part]
     scopes = [s for s in row.get("scopes") or [] if s not in dropped]
-    if not (oauth.has_gmail(scopes) or oauth.has_sheets(scopes)):
+    if not any(oauth.has(p, scopes) for p in oauth.PARTS):
         await delete_connection(config, user_id)
         return
     now = datetime.now(timezone.utc).isoformat()
@@ -130,7 +133,7 @@ async def get_access_token(config: oauth.OAuthConfig, user_id: str) -> str:
 
     row = await _row(user_id)
     if not row:
-        raise GoogleNotConnectedError("Connect your Google account first so the agent can use Gmail and Calendar")
+        raise GoogleNotConnectedError("Connect your Google account on the Connect page first")
     refresh_token = decrypt(config.secret_key, row["refresh_token_encrypted"])
     async with httpx.AsyncClient(timeout=15.0) as client:
         try:

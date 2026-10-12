@@ -47,12 +47,12 @@ def test_refresh_token_encryption_round_trip():
     assert connections.decrypt(KEY, secret) == "1//refresh-token"
 
 
-def test_auth_url_requests_offline_gmail_and_calendar_access():
+def test_auth_url_requests_offline_access_for_gmail_or_calendar():
     config = oauth.OAuthConfig("cid", "secret", "https://api.example.com/integrations/google/callback", KEY)
     url = oauth.build_auth_url(config, "state123")
     assert "access_type=offline" in url and "prompt=consent" in url
-    for scope in ("gmail.send", "gmail.readonly", "calendar.events"):
-        assert scope in url
+    assert "gmail.send" in url and "gmail.readonly" in url and "calendar.events" not in url
+    assert "calendar.events" in oauth.build_auth_url(config, "state123", scopes=oauth.CALENDAR_SCOPES)
 
 
 # --- Gmail helpers ------------------------------------------------------------
@@ -204,6 +204,16 @@ def test_agent_drafts_guarded_actions():
     assert all(a.status == "draft" for a in result.actions)
 
 
+def test_without_google_calendar_meetings_are_drafted_with_a_note():
+    plan = {"summary": "A demo.", "actions": [
+        {"type": "meeting", "title": "Agentis demo", "attendees": ["priya@acme.com"], "start": "2026-10-09T15:00", "duration_minutes": 30},
+    ]}
+    agent = SalesOutreachAgent(llm=FakeLLM(plan), gmail=FakeGmail({}), calendar=None)
+    result = asyncio.run(agent.run(_ctx("Book a demo with priya@acme.com Friday 3pm")))
+    assert [a.title for a in result.actions if isinstance(a, MeetingAction)] == ["Agentis demo"]
+    assert result.actions[0].conflicts == [] and any("Google Calendar isn't connected" in n for n in result.notes)
+
+
 def test_agent_can_write_to_lead_addresses_and_reports_missing_threads():
     leads = compact_leads(
         {"leads": [{"company_name": "Mamaearth", "website": "mamaearth.in", "contacts": [{"name": "Varun", "title": "CEO", "email": "varun@mamaearth.in"}]}]}
@@ -350,6 +360,31 @@ def test_approve_without_google_connection_marks_draft_failed(fake_db, monkeypat
 
         raise GoogleNotConnectedError("Connect your Google account first")
 
+    async def nothing(user_id):
+        return None
+
     monkeypatch.setattr(connections, "get_access_token", no_connection)
+    monkeypatch.setattr(connections, "get_connection", nothing)
     result = asyncio.run(outreach_runner.decide_action(USER, REQUEST_ID, "e1", "approve", {}))
-    assert result["status"] == "failed" and "Connect your Google account" in result["error"]
+    assert result["status"] == "failed" and "Connect Gmail" in result["error"]
+
+
+def test_booking_a_meeting_needs_google_calendar_connected(fake_db, monkeypatch):
+    from config.settings import Settings
+    from integrations.google.connections import GoogleConnection
+
+    settings = Settings(_env_file=None, google_oauth_client_id="c", google_oauth_client_secret="s", integrations_encryption_key=KEY)
+    monkeypatch.setattr(outreach_runner, "get_settings", lambda: settings)
+    meeting = MeetingAction(id="m1", title="Intro", attendees=["ravi@beta.io"], start="2026-10-20T10:00:00", end="2026-10-20T10:30:00", time_zone="Asia/Kolkata")
+    fake_db["row"]["result"]["actions"].append(meeting.model_dump(mode="json"))
+
+    async def gmail_only(user_id):
+        return GoogleConnection(USER.id, "asha@agentis.ai", list(oauth.REQUIRED_GMAIL_SCOPES), None)
+
+    async def token(config, user_id):
+        raise AssertionError("no Google call without Calendar connected")
+
+    monkeypatch.setattr(connections, "get_connection", gmail_only)
+    monkeypatch.setattr(connections, "get_access_token", token)
+    result = asyncio.run(outreach_runner.decide_action(USER, REQUEST_ID, "m1", "approve", {}))
+    assert result["status"] == "failed" and "Connect Google Calendar" in result["error"]

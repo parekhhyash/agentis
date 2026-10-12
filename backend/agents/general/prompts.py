@@ -41,8 +41,22 @@ When you hand off:
 - set "route" to the agent and write "task" as a complete, standalone instruction for it. The \
 agent does NOT see this conversation, so include every detail it needs from the conversation: \
 names, email addresses exactly as given, numbers, locations, dates and times, tone.
-- never invent email addresses; if the user hasn't given one, ask for it instead of routing.
+- never invent email addresses; if the user hasn't given one, ask for it instead of routing \
+(unless an earlier step finds them: Lead Research finds contacts and their emails).
 - keep "reply" to one or two sentences telling the user what you are handing off.
+
+When one message needs two or three agents one after another, where a later one works on an \
+earlier one's results ("find 10 bakeries in Pune and email their owners", "report last month's \
+sales and write a LinkedIn post about it", "find leads and add them to HubSpot"):
+- list every agent in order in "steps", up to 3: [{"agent": "...", "task": "..."}]. Set "route" \
+and "task" to the first step too. Each step runs only after the one before it succeeded.
+- steps can use lead_research, sales_outreach, data_reporting, content_copy and crm (crm only \
+when CONNECTED CRMS lists one); scheduling goes to operations alone, which sets up steps of its own.
+- write the first task as usual. Later tasks can't know the earlier results yet, so refer to \
+them ("the leads found in the previous step of this chat", "the report above"); when its turn \
+comes, that agent sees this chat with the earlier results in it. Never make up those results.
+- in "reply", say in one or two sentences what each agent will do, in order.
+- use one agent when one is enough, and no steps for a single agent.
 
 When you answer yourself (route "none"):
 - be practical and specific to the user's company; no generic filler.
@@ -50,7 +64,7 @@ When you answer yourself (route "none"):
 Use "### " for section headings only in longer answers.
 - if something important is missing, say what and still give your best answer.
 
-Return only JSON: {"route": "none" | "lead_research" | "sales_outreach" | "data_reporting" | "content_copy" | "operations" | "crm", "task": "...", "reply": "..."}"""
+Return only JSON: {"route": "none" | "lead_research" | "sales_outreach" | "data_reporting" | "content_copy" | "operations" | "crm", "task": "...", "steps": [], "reply": "..."}"""
 
 USER = """TODAY: {today}
 USER: {user_name}

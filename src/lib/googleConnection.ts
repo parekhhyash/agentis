@@ -2,18 +2,28 @@ import { useCallback, useEffect, useState } from 'react'
 
 import { authedFetch } from './backendApi'
 
+// Gmail, Google Calendar and Google Sheets connect on their own, onto one
+// Google account.
+export type GooglePart = 'gmail' | 'calendar' | 'sheets'
+
 export interface GoogleStatus {
   configured: boolean
-  // Gmail and Calendar are allowed.
+  // Gmail is connected.
   connected: boolean
-  // Google Sheets is allowed (same Google account, its own permission).
+  // Google Calendar and Google Sheets are connected (same Google account).
+  calendar?: boolean
   sheets?: boolean
   email: string | null
 }
 
-// The user's Google connection: Gmail + Calendar for Sales & Outreach, and
-// Google Sheets for data files and exports. Tokens stay on the backend; this
-// only sees what's allowed.
+export function partConnected(status: GoogleStatus | null, part: GooglePart): boolean {
+  if (!status) return false
+  return part === 'gmail' ? status.connected : Boolean(status[part])
+}
+
+// The user's Google connection: Gmail (and Calendar for meetings) for Sales &
+// Outreach, and Google Sheets for data files and exports. Tokens stay on the
+// backend; this only sees what's allowed.
 export function useGoogleConnection(enabled: boolean) {
   const [status, setStatus] = useState<GoogleStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -39,12 +49,10 @@ export function useGoogleConnection(enabled: boolean) {
     }
   }, [enabled])
 
-  // `sheets === true` asks for Google Sheets only (other values, like a click
-  // event, mean Gmail and Calendar).
-  async function connect(sheets?: unknown) {
+  async function connect(part: GooglePart = 'gmail') {
     setBusy(true)
     try {
-      const { url } = await authedFetch<{ url: string }>(`/integrations/google/auth-url${sheets === true ? '?sheets=true' : ''}`)
+      const { url } = await authedFetch<{ url: string }>(`/integrations/google/auth-url?part=${part}`)
       window.location.href = url
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not start Google sign-in')
@@ -52,8 +60,8 @@ export function useGoogleConnection(enabled: boolean) {
     }
   }
 
-  // One part (Gmail and Calendar, or Sheets), or the whole Google account.
-  async function disconnect(part?: 'gmail' | 'sheets') {
+  // One part, or the whole Google account.
+  async function disconnect(part?: GooglePart) {
     setBusy(true)
     try {
       await authedFetch(`/integrations/google${part ? `?part=${part}` : ''}`, { method: 'DELETE' })

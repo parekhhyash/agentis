@@ -11,15 +11,12 @@ import { CONNECTORS } from '../lib/connectors'
 
 type Orbiter = { src: string; name: string; mono: boolean; wide: boolean }
 
-const LOGOS: Orbiter[] = CONNECTORS.flatMap((c) =>
-  c.logos.map((src, i) => ({
-    src,
-    // "Gmail & Google Calendar" is two logos.
-    name: c.id === 'google' ? (i === 0 ? 'Gmail' : 'Google Calendar') : c.name.replace(' (Twitter)', ''),
-    mono: Boolean(c.monochrome),
-    wide: c.id === 'zoho' || c.id === 'salesforce',
-  })),
-)
+const LOGOS: Orbiter[] = CONNECTORS.map((c) => ({
+  src: c.logo,
+  name: c.name.replace(' (Twitter)', ''),
+  mono: Boolean(c.monochrome),
+  wide: c.id === 'zoho' || c.id === 'salesforce',
+}))
 // Google Sheets, X and Slack go round the mark; the rest on the outer orbit.
 const INNER_NAMES = new Set(['Google Sheets', 'X', 'Slack'])
 const OUTER = LOGOS.filter((l) => !INNER_NAMES.has(l.name))

@@ -73,6 +73,7 @@ async def run_general(
         )
         if result.route == "crm":
             # CRM work happens inside this turn: lookups now, changes as drafts.
+            # Later steps, if any, still follow as their own turns.
             result.reply, result.crm = await run_crm(
                 user,
                 message=result.task or prompt,
@@ -82,7 +83,9 @@ async def run_general(
                 today=datetime.now(timezone.utc),
                 progress=progress,
             )
-            result.route, result.task = "none", ""
+            result.steps = result.steps[1:]
+            first = result.steps[0] if result.steps else None
+            result.route, result.task = (first.agent, first.task) if first else ("none", "")
     except Exception as exc:  # noqa: BLE001 - mapped to a user-facing message
         if isinstance(exc, (CrmError, McpError)):
             error = OutreachError(str(exc), getattr(exc, "status", 502))

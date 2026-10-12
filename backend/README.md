@@ -259,7 +259,7 @@ backend/
 ├── agents/operations/      # schedule.py (format, next run), proposal checks in agent.py
 ├── integrations/mcp/       # MCP client (Streamable HTTP, official SDK), tool classification
 ├── integrations/crm/       # HubSpot/Salesforce/Zoho providers, OAuth + PKCE, connections
-├── integrations/google/    # OAuth, encrypted connections, Gmail + Calendar + Sheets clients
+├── integrations/google/    # OAuth (Gmail, Calendar and Sheets connect separately), encrypted connections, API clients
 ├── integrations/social/    # LinkedIn/X OAuth, encrypted tokens, posting
 ├── integrations/oauth_common.py  # PKCE + encrypted OAuth state (CRMs, LinkedIn, X)
 ├── agents/lead_research/

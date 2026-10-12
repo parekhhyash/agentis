@@ -12,6 +12,17 @@ from agents.lead_research.llm import LLMClient
 
 Route = Literal["none", "lead_research", "sales_outreach", "data_reporting", "content_copy", "operations", "crm"]
 ROUTES = ("lead_research", "sales_outreach", "data_reporting", "content_copy", "operations")
+# Agents a message can go through one after another (scheduling stays a
+# single handoff: a schedule can hold steps of its own).
+STEP_ROUTES = ("lead_research", "sales_outreach", "data_reporting", "content_copy", "crm")
+MAX_STEPS = 3
+
+StepRoute = Literal["lead_research", "sales_outreach", "data_reporting", "content_copy", "crm"]
+
+
+class Handoff(BaseModel):
+    agent: StepRoute
+    task: str
 
 
 class GeneralResult(BaseModel):
@@ -20,6 +31,9 @@ class GeneralResult(BaseModel):
     route: Route = "none"
     # Instruction for the routed agent (empty when answering directly).
     task: str = ""
+    # Every agent the message goes to, in order, when it needs more than one
+    # (the first is route/task). Each runs once the one before it succeeded.
+    steps: list[Handoff] = []
     llm_tokens: int = 0
     # Set when the answer came from the user's CRM (lookups made, changes drafted).
     crm: CrmResult | None = None
@@ -64,8 +78,31 @@ class GeneralAgent:
         route = data.get("route") if data.get("route") in allowed else "none"
         reply = str(data.get("reply") or "").strip()
         task = str(data.get("task") or "").strip()
+        steps = _steps(data.get("steps"), allowed)
+        if len(steps) > 1:
+            route, task = steps[0].agent, steps[0].task
+        else:
+            steps = []
         if route != "none" and not task:
             task = message
         if not reply:
             reply = "I'll hand this to the right agent." if route != "none" else "Sorry, I couldn't come up with an answer. Try rephrasing?"
-        return GeneralResult(reply=reply, route=route, task=task if route != "none" else "", llm_tokens=out.tokens)
+        return GeneralResult(
+            reply=reply, route=route, task=task if route != "none" else "", steps=steps, llm_tokens=out.tokens
+        )
+
+
+def _steps(raw: Any, allowed: tuple[str, ...]) -> list[Handoff]:
+    """The model's step list, keeping only agents that can be chained (and
+    are available) with a task, up to MAX_STEPS. Anything unusable drops the
+    whole list rather than running a chain with a gap in it."""
+    if not isinstance(raw, list) or not raw:
+        return []
+    steps: list[Handoff] = []
+    for item in raw[:MAX_STEPS]:
+        agent = item.get("agent") if isinstance(item, dict) else None
+        task = str(item.get("task") or "").strip() if isinstance(item, dict) else ""
+        if agent not in STEP_ROUTES or agent not in allowed or not task:
+            return []
+        steps.append(Handoff(agent=agent, task=task))
+    return steps

@@ -159,7 +159,9 @@ class SalesOutreachAgent:
         *,
         llm: LLMClient,
         gmail: GmailReader,
-        calendar: CalendarReader,
+        # None when Google Calendar isn't connected: meetings are drafted
+        # without a clash check, and booking one asks to connect it.
+        calendar: CalendarReader | None,
         max_actions: int = 20,
         on_step: ProgressCallback | None = None,
         is_cancelled: Callable[[], bool] | None = None,
@@ -243,7 +245,11 @@ class SalesOutreachAgent:
                 result.actions.extend(drafts)
             else:
                 result.notes.append("I couldn't find any emails sent through Agentis in the last 30 days to check.")
-        for meeting in meetings:
+        if meetings and self._calendar is None:
+            result.notes.append(
+                "Google Calendar isn't connected, so I couldn't check for clashes. Connect it on the Connect page before approving a meeting."
+            )
+        for meeting in meetings if self._calendar is not None else []:
             await self._step(f"Checking your calendar for {meeting.title}")
             meeting.conflicts = await self._conflicts(meeting, tz)
 

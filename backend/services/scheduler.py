@@ -21,6 +21,7 @@ from typing import Any
 
 import httpx
 
+from agents.general.agent import Handoff
 from agents.operations.schedule import Schedule, local_text, next_run
 from agents.operations.schemas import Step
 from api.models import CompanyContext
@@ -264,10 +265,16 @@ async def _run_step(
             await run_content(user, prompt=step.prompt, request_id=request_id, company_context=company)
         else:
             result = await run_general(user, prompt=step.prompt, request_id=request_id, company_context=company, user_name=user_name)
-            if result.route in HANDOFF_AGENTS and result.task:
-                # General handed the step on, as it does in the chat.
-                handoff = Step(agent=result.route, prompt=result.task)  # type: ignore[arg-type]
-                return await _run_step(user, handoff, task_id, conversation_id, company, user_name, time_zone, outcomes)
+            # General handed the step on, as it does in the chat: to one agent,
+            # or to several in order (a CRM step goes back through General).
+            handoffs = result.steps
+            if not handoffs and result.route in HANDOFF_AGENTS and result.task:
+                handoffs = [Handoff(agent=result.route, task=result.task)]
+            for handoff in handoffs:
+                agent = "general" if handoff.agent == "crm" else handoff.agent
+                next_step = Step(agent=agent, prompt=handoff.task)  # type: ignore[arg-type]
+                if await _run_step(user, next_step, task_id, conversation_id, company, user_name, time_zone, outcomes):
+                    return True
     except Exception as exc:  # noqa: BLE001 - the runner already recorded it on the turn
         outcome.ok, outcome.error = False, f"{AGENT_LABELS.get(step.agent, step.agent)}: {_message(exc)}"
         return True
