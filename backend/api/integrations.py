@@ -10,7 +10,7 @@ other way round, as long as it's the same Google account.
 """
 
 import logging
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlencode
 
 import httpx
@@ -110,13 +110,19 @@ async def google_callback(code: str | None = None, state: str | None = None, err
 
 
 @router.delete("")
-async def google_disconnect(user: AuthUser = Depends(current_user)) -> dict:
+async def google_disconnect(part: Literal["gmail", "sheets"] | None = None, user: AuthUser = Depends(current_user)) -> dict:
+    """Disconnects Gmail and Calendar (`?part=gmail`), Google Sheets
+    (`?part=sheets`), or the whole Google account (no part)."""
     try:
         config = oauth.oauth_config(get_settings())
     except GoogleConfigError:
         config = None
-    await connections.delete_connection(config, user.id)
-    return {"connected": False}
+    if part:
+        await connections.remove_part(config, user.id, part)
+    else:
+        await connections.delete_connection(config, user.id)
+    connection = await connections.get_connection(user.id)
+    return {"connected": bool(connection and connection.gmail), "sheets": bool(connection and connection.sheets)}
 
 
 

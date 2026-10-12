@@ -35,8 +35,8 @@ function Tile({ connector }: { connector: ConnectorInfo }) {
   )
 }
 
-// Google Sheets rides on the Google connection: its own permission, the same
-// Google account (and one Disconnect for both).
+// Google Sheets rides on the Google connection: its own permission and its
+// own Disconnect, on the same Google account.
 function SheetsControls({
   status,
   error,
@@ -57,16 +57,14 @@ function SheetsControls({
           <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
           <span className="truncate">{status.email}</span>
         </span>
-        {!status.connected && (
-          <button
-            type="button"
-            onClick={onDisconnect}
-            disabled={sheets.busy}
-            className="rounded-full px-3 py-1.5 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-100 disabled:opacity-50"
-          >
-            Disconnect
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={onDisconnect}
+          disabled={sheets.busy}
+          className="rounded-full px-3 py-1.5 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-100 disabled:opacity-50"
+        >
+          Disconnect
+        </button>
       </div>
     )
   return (
@@ -111,7 +109,7 @@ export default function ConnectionsPanel({
     error: string | null
     busy: boolean
     connect: (sheets?: unknown) => void
-    disconnect: () => void
+    disconnect: (part?: 'gmail' | 'sheets') => void
   }
   crm: ReturnType<typeof useCrmConnections>
   social: ReturnType<typeof useSocialConnections>
@@ -150,9 +148,8 @@ export default function ConnectionsPanel({
               </span>
               <button
                 type="button"
-                onClick={google.disconnect}
+                onClick={() => google.disconnect('gmail')}
                 disabled={google.busy}
-                title={status.sheets ? 'Disconnects your Google account, Google Sheets included' : undefined}
                 className="rounded-full px-3 py-1.5 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-100 disabled:opacity-50"
               >
                 Disconnect
@@ -173,7 +170,7 @@ export default function ConnectionsPanel({
         {others.map((connector) => (
           <Card key={connector.id} connector={connector}>
             {connector.id === 'sheets' ? (
-              <SheetsControls status={status} error={google.error} sheets={sheets} onDisconnect={google.disconnect} />
+              <SheetsControls status={status} error={google.error} sheets={sheets} onDisconnect={() => google.disconnect('sheets')} />
             ) : CRM_IDS.has(connector.id) ? (
               <CrmConnectControls provider={connector.id as CrmProvider} crm={crm} />
             ) : SOCIAL_IDS.has(connector.id) ? (

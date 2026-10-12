@@ -209,6 +209,66 @@ def test_export_creates_a_sheet_only_with_sheets_connected(google_api):
     assert client.post("/integrations/google/sheets", json=too_wide).status_code == 422
 
 
+def test_disconnecting_one_part_keeps_the_other_and_the_last_part_revokes(monkeypatch):
+    from integrations.google import connections
+
+    both = ["openid", "email", *oauth.REQUIRED_SCOPES, *oauth.REQUIRED_SHEETS_SCOPES]
+    row: dict[str, Any] = {"scopes": both}
+    calls: list[Any] = []
+
+    async def _row(user_id):
+        return row if row["scopes"] is not None else None
+
+    async def update(table, params, patch):
+        calls.append(("update", patch["scopes"]))
+        row["scopes"] = patch["scopes"]
+
+    async def delete_connection(config, user_id):
+        calls.append(("revoke",))
+        row["scopes"] = None
+
+    monkeypatch.setattr(connections, "_row", _row)
+    monkeypatch.setattr(connections.supabase_rest, "update", update)
+    monkeypatch.setattr(connections, "delete_connection", delete_connection)
+
+    asyncio.run(connections.remove_part(None, USER.id, "sheets"))
+    left = GoogleConnection(USER.id, "me@x.com", row["scopes"], None)
+    assert left.gmail and not left.sheets and calls == [("update", row["scopes"])]
+    # Gmail was the last part: the whole grant goes, revoked at Google.
+    asyncio.run(connections.remove_part(None, USER.id, "gmail"))
+    assert calls[-1] == ("revoke",) and row["scopes"] is None
+    # Nothing connected: nothing to do.
+    asyncio.run(connections.remove_part(None, USER.id, "gmail"))
+    assert len(calls) == 2
+
+    row["scopes"] = both
+    asyncio.run(connections.remove_part(None, USER.id, "gmail"))
+    left = GoogleConnection(USER.id, "me@x.com", row["scopes"], None)
+    assert left.sheets and not left.gmail
+
+
+def test_disconnect_endpoint_takes_a_part(google_api, monkeypatch):
+    client, state = google_api
+    from api import integrations as api_module
+
+    removed: list[Any] = []
+
+    async def remove_part(config, user_id, part):
+        removed.append(part)
+        state["connection"] = GoogleConnection(USER.id, "me@agentis.app", list(oauth.REQUIRED_SCOPES), None)
+
+    async def delete_connection(config, user_id):
+        removed.append("all")
+        state["connection"] = None
+
+    monkeypatch.setattr(api_module.connections, "remove_part", remove_part)
+    monkeypatch.setattr(api_module.connections, "delete_connection", delete_connection)
+    assert client.delete("/integrations/google", params={"part": "sheets"}).json() == {"connected": True, "sheets": False}
+    assert client.delete("/integrations/google").json() == {"connected": False, "sheets": False}
+    assert client.delete("/integrations/google", params={"part": "drive"}).status_code == 422
+    assert removed == ["sheets", "all"]
+
+
 # --- linked sheets as data files ---------------------------------------------------------
 
 @pytest.fixture

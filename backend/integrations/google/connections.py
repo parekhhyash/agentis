@@ -107,6 +107,22 @@ async def delete_connection(config: oauth.OAuthConfig | None, user_id: str) -> N
     await supabase_rest.delete(TABLE, {"user_id": f"eq.{user_id}"})
 
 
+async def remove_part(config: oauth.OAuthConfig | None, user_id: str, part: str) -> None:
+    """Stops Agentis using one part of the grant ("gmail": Gmail and Calendar,
+    or "sheets"). Google can't take back single permissions, so the other part
+    keeps the grant; once neither is left, the whole grant is revoked."""
+    row = await _row(user_id)
+    if not row:
+        return
+    dropped = oauth.REQUIRED_SCOPES if part == "gmail" else oauth.REQUIRED_SHEETS_SCOPES
+    scopes = [s for s in row.get("scopes") or [] if s not in dropped]
+    if not (oauth.has_gmail(scopes) or oauth.has_sheets(scopes)):
+        await delete_connection(config, user_id)
+        return
+    now = datetime.now(timezone.utc).isoformat()
+    await supabase_rest.update(TABLE, {"user_id": f"eq.{user_id}"}, {"scopes": scopes, "updated_at": now})
+
+
 async def get_access_token(config: oauth.OAuthConfig, user_id: str) -> str:
     cached = _access_tokens.get(user_id)
     if cached and cached[1] - 60 > time.time():

@@ -52,10 +52,11 @@ export function useGoogleConnection(enabled: boolean) {
     }
   }
 
-  async function disconnect() {
+  // One part (Gmail and Calendar, or Sheets), or the whole Google account.
+  async function disconnect(part?: 'gmail' | 'sheets') {
     setBusy(true)
     try {
-      await authedFetch('/integrations/google', { method: 'DELETE' })
+      await authedFetch(`/integrations/google${part ? `?part=${part}` : ''}`, { method: 'DELETE' })
       await refresh()
     } finally {
       setBusy(false)

@@ -862,7 +862,7 @@ The frontend runs at `http://localhost:5173` and the backend at `http://localhos
 | `GET` | `/integrations/google/auth-url` | ✅ Bearer | Get Google OAuth consent URL (`?sheets=true` for Google Sheets) |
 | `POST` | `/integrations/google/sheets` | ✅ Bearer | Create a Google Sheet from `{title, tab, headers, rows}`; returns its link |
 | `GET` | `/integrations/google/callback` | ❌ | OAuth callback (internal) |
-| `DELETE` | `/integrations/google` | ✅ Bearer | Disconnect Google account |
+| `DELETE` | `/integrations/google` | ✅ Bearer | Disconnect Gmail and Calendar (`?part=gmail`), Google Sheets (`?part=sheets`) or the whole Google account (no part). Google can't take back single permissions, so Agentis stops using that part; the grant is revoked once neither part is left |
 
 ---
 
