@@ -1,8 +1,14 @@
 import { useState } from 'react'
 
 import type { SocialProvider, useSocialConnections } from '../../lib/content'
+import Dialog from './Dialog'
 
-// The controls inside the LinkedIn / X / Notion / Medium cards on the Connect page.
+const primaryButton =
+  'rounded-full bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90 disabled:opacity-50'
+
+// The controls inside the LinkedIn / X / Notion / Medium cards on the Connect
+// page. Medium's token is typed into a dialog, so its card stays the size of
+// the others.
 export default function SocialConnectControls({
   provider,
   social,
@@ -13,6 +19,7 @@ export default function SocialConnectControls({
   const status = social.byProvider(provider)
   const [error, setError] = useState<string | null>(null)
   const [token, setToken] = useState('')
+  const [tokenOpen, setTokenOpen] = useState(false)
   // Captured once: the page doesn't need to tick to know a token is ending soon.
   const [now] = useState(() => Date.now())
   const busy = social.busy === provider
@@ -48,38 +55,9 @@ export default function SocialConnectControls({
           </button>
         </div>
       ) : status.connect_with === 'token' ? (
-        <form
-          className="space-y-2"
-          onSubmit={async (e) => {
-            e.preventDefault()
-            setError(null)
-            const problem = await social.connectWithToken(provider, token.trim())
-            if (problem) setError(problem)
-            else setToken('')
-          }}
-        >
-          <p className="text-xs leading-relaxed text-slate-500">
-            Medium stopped issuing API tokens in 2025. If you made one before then, find it in Medium under Settings,
-            Security and apps, Integration tokens. Without one, use Copy for Medium on a story.
-          </p>
-          <div className="flex gap-2">
-            <input
-              type="password"
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
-              placeholder="Integration token"
-              autoComplete="off"
-              className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-surface px-3 py-1.5 text-sm text-slate-800 focus:border-sky-400 focus:outline-none"
-            />
-            <button
-              type="submit"
-              disabled={busy || token.trim().length < 10}
-              className="rounded-full bg-brand-blue px-4 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90 disabled:opacity-50"
-            >
-              {busy ? 'Checking…' : 'Connect'}
-            </button>
-          </div>
-        </form>
+        <button type="button" onClick={() => setTokenOpen(true)} className={primaryButton}>
+          Connect
+        </button>
       ) : (
         <button
           type="button"
@@ -89,7 +67,7 @@ export default function SocialConnectControls({
             const problem = await social.connect(provider)
             if (problem) setError(problem)
           }}
-          className="rounded-full bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90 disabled:opacity-50"
+          className={primaryButton}
         >
           {busy ? `Opening ${status.name}…` : 'Connect'}
         </button>
@@ -97,7 +75,52 @@ export default function SocialConnectControls({
       {expiring && expires && (
         <p className="text-xs text-amber-700">LinkedIn access ends {expires.toLocaleDateString()}; reconnect to keep posting.</p>
       )}
-      {error && <p className="text-sm text-red-700">{error}</p>}
+      {error && !tokenOpen && <p className="text-sm text-red-700">{error}</p>}
+
+      {status.connect_with === 'token' && (
+        <Dialog
+          open={tokenOpen}
+          onClose={() => {
+            setTokenOpen(false)
+            setError(null)
+            setToken('')
+          }}
+          title={`Connect ${status.name}`}
+        >
+          <form
+            className="space-y-3"
+            onSubmit={async (e) => {
+              e.preventDefault()
+              setError(null)
+              const problem = await social.connectWithToken(provider, token.trim())
+              if (problem) setError(problem)
+              else {
+                setToken('')
+                setTokenOpen(false)
+              }
+            }}
+          >
+            <p className="text-sm leading-relaxed text-slate-600">
+              Medium stopped issuing API tokens in 2025. If you made one before then, find it in Medium under Settings,
+              Security and apps, Integration tokens. Without one, use Copy for Medium on a story.
+            </p>
+            <input
+              type="password"
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              placeholder="Integration token"
+              aria-label="Medium integration token"
+              autoComplete="off"
+              autoFocus
+              className="w-full rounded-lg border border-slate-300 bg-surface px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-sky-400 focus:outline-none"
+            />
+            {error && <p className="text-sm text-red-700">{error}</p>}
+            <button type="submit" disabled={busy || token.trim().length < 10} className={primaryButton}>
+              {busy ? 'Checking…' : 'Connect'}
+            </button>
+          </form>
+        </Dialog>
+      )}
     </div>
   )
 }

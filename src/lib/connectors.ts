@@ -60,7 +60,7 @@ export const CONNECTORS: ConnectorInfo[] = [
     id: 'salesforce',
     name: 'Salesforce',
     description:
-      'Query and update accounts, contacts and opportunities through Salesforce\u2019s hosted MCP server. Your Salesforce admin sets up a small app once (steps below).',
+      'Query and update accounts, contacts and opportunities through Salesforce\u2019s hosted MCP server. Your Salesforce admin sets up a small app once (Connect shows how).',
     usedBy: 'General, Lead Research',
     logos: [salesforce],
     available: true,
