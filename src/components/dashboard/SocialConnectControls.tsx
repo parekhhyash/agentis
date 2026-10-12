@@ -25,7 +25,8 @@ export default function SocialConnectControls({
   const busy = social.busy === provider
 
   if (!status) return <p className="text-sm text-slate-400">{social.error ?? 'Checking…'}</p>
-  if (!status.configured && provider === 'x')
+  // X and LinkedIn open with the post filled in, so they work without an app.
+  if (!status.configured && (provider === 'x' || provider === 'linkedin'))
     return (
       <p className="flex items-center gap-2 text-sm text-slate-600">
         <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" />

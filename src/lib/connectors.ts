@@ -76,7 +76,7 @@ export const CONNECTORS: ConnectorInfo[] = [
   {
     id: 'linkedin',
     name: 'LinkedIn',
-    description: 'Post the Content & Copy agent\u2019s LinkedIn drafts to your profile after you confirm.',
+    description: 'Drafted posts open in LinkedIn with the text filled in, ready to post from your own profile. Free, nothing to connect.',
     usedBy: 'Content & Copy',
     logos: [linkedin],
     available: true,

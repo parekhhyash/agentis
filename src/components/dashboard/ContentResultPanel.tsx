@@ -459,16 +459,9 @@ function PieceCard({
     }
   }
 
-  // Without a LinkedIn connection: the post box opens with the text, and the
-  // text is copied too in case LinkedIn leaves the box empty.
-  async function openInLinkedIn() {
+  // Without a LinkedIn connection, LinkedIn's post box opens with the text.
+  function openInLinkedIn() {
     window.open(linkedinShareUrl(draft.text), '_blank', 'noopener')
-    try {
-      await navigator.clipboard.writeText(draft.text)
-      setMessage({ tone: 'ok', text: 'LinkedIn opened with your post. If the post box is empty, paste: the post is copied.' })
-    } catch {
-      setMessage({ tone: 'ok', text: 'LinkedIn opened with your post. If the post box is empty, use Copy and paste it in.' })
-    }
   }
 
   async function copyMedium() {
@@ -593,7 +586,7 @@ function PieceCard({
                   type="button"
                   disabled={overLimit}
                   title={overLimit ? 'Shorten it to fit the limit first' : `Opens ${NETWORK[network]} with this post ready; you press Post`}
-                  onClick={() => void (network === 'x' ? openInX() : openInLinkedIn())}
+                  onClick={() => (network === 'x' ? void openInX() : openInLinkedIn())}
                   className="rounded-full bg-ink px-3.5 py-1 text-sm font-semibold text-white hover:bg-ink/90 disabled:opacity-50 dark:bg-white dark:text-ink"
                 >
                   Open in {NETWORK[network]}

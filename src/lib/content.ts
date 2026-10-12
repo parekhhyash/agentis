@@ -169,9 +169,8 @@ export function xIntentUrl(text: string): string {
   return `https://x.com/intent/tweet?text=${encodeURIComponent(text)}`
 }
 
-// LinkedIn has no official link that fills in a post, so this opens the
-// post box with the text (LinkedIn fills it in when the link works) and the
-// caller copies the text too, for pasting if the box comes up empty.
+// LinkedIn's share link: opens the post box with the text filled in, and the
+// user presses Post from their own profile. Free, like X's post intent.
 export function linkedinShareUrl(text: string): string {
   return `https://www.linkedin.com/feed/?shareActive=true&text=${encodeURIComponent(text)}`
 }
