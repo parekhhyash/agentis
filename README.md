@@ -37,8 +37,8 @@ The system is built as a **React + TypeScript** frontend (Vite) paired with a **
 
 - **Lead Research Agent** — Discovers, filters, deeply researches, and qualifies companies as potential sales leads using Exa search and LLM analysis
 - **Sales & Outreach Agent** — Drafts personalized emails, thread-aware replies, and calendar invitations using the user's connected Gmail and Google Calendar
-- **General Agent** — The default chat agent: answers questions with company and conversation context, or hands the task to the right specialist. A message that needs several agents in order ("find 10 bakeries in Pune and email their owners", "report last month's sales and write a LinkedIn post about it", "find leads and add them to HubSpot") becomes a plan of up to 3 steps: each runs as its own turn of the chat once the one before it succeeded (Lead Research must find at least one lead), and reads the chat, so it works on the earlier results. The General turn shows the plan and each step's status, and offers to continue a plan that was interrupted (say, by a reload). Emails and CRM changes still wait for approval. Scheduled tasks run General's plans the same way
-- **CRM integrations over MCP** — Connect **HubSpot**, **Salesforce** or **Zoho CRM** through their official MCP servers, all free to integrate, each person with their own account. Ask General about contacts, companies and deals, ask it to update records, or add researched leads with one click. Lookups run on their own; every change is a draft you approve; delete and merge tools are never used
+- **Manager Agent** — The default chat agent (`general` in the code and database): answers questions with company and conversation context, or hands the task to the right specialist. A message that needs several agents in order ("find 10 bakeries in Pune and email their owners", "report last month's sales and write a LinkedIn post about it", "find leads and add them to HubSpot") becomes a plan of up to 3 steps: each runs as its own turn of the chat once the one before it succeeded (Lead Research must find at least one lead), and reads the chat, so it works on the earlier results. The Manager's turn shows the plan and each step's status, and offers to continue a plan that was interrupted (say, by a reload). Emails and CRM changes still wait for approval. Scheduled tasks run the Manager's plans the same way
+- **CRM integrations over MCP** — Connect **HubSpot**, **Salesforce** or **Zoho CRM** through their official MCP servers, all free to integrate, each person with their own account. Ask the Manager about contacts, companies and deals, ask it to update records, or add researched leads with one click. Lookups run on their own; every change is a draft you approve; delete and merge tools are never used
 - **Google Sheets** — Link a sheet as a data file for Data & Reporting (read again whenever a report or a scheduled run uses it), and export researched leads or any report table to a new sheet, through the same Agentis Google sign-in as Gmail
 - **Data & Reporting Agent** — Answers questions about numbers with headline figures, charts and tables, from the user's Agentis activity (leads, emails, replies, meetings), CSV/Excel files they upload and Google Sheets they link. The model plans queries; the backend runs every calculation, and the written summary may only quote numbers that the queries produced
 - **Content & Copy Agent** — Writes LinkedIn posts, X posts and threads, Instagram captions, blog posts, Medium stories, emails and ad copy, plus any other writing to the user's own requirements (press releases, web pages, product descriptions, scripts), several options per piece. The backend checks every option against the platform's real limits (X counts links as 23 and emoji as 2) and against what the user asked for (word or character limits, phrases to include, sections), flags clichés and figures that aren't in the request, fixes rule-breaking drafts once, has an editor critique every option and rewrites them from that critique, then recommends one
@@ -361,7 +361,7 @@ Instruction + Company context + Optional leads from Lead Research
 
 ### CRM over MCP (HubSpot, Salesforce, Zoho CRM)
 
-The backend is an MCP client (official MCP Python SDK, Streamable HTTP). Each user connects their own CRM account; the General agent routes CRM questions and requests (route `crm`) to a bounded tool loop inside the same chat turn.
+The backend is an MCP client (official MCP Python SDK, Streamable HTTP). Each user connects their own CRM account; the Manager (`general`) routes CRM questions and requests (route `crm`) to a bounded tool loop inside the same chat turn.
 
 ```
 Message about the CRM ("what's the status of the Acme deal?", "add these leads to HubSpot")
@@ -527,7 +527,7 @@ Scores and the editor's notes are the agent's own working notes, used to improve
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-Steps use the existing agents (Data & Reporting, Sales & Outreach, Lead Research, Content & Copy, General with CRM), so a scheduled run can only do what those agents do in the chat: read, research, write and **draft**. Sending, posting and CRM changes still need the user's click. Schedule times are wall-clock times in the task's time zone, so "Monday at 9" stays at 9 across daylight-saving changes; a run missed while the service was down happens once when it's back.
+Steps use the existing agents (Data & Reporting, Sales & Outreach, Lead Research, Content & Copy, the Manager with CRM), so a scheduled run can only do what those agents do in the chat: read, research, write and **draft**. Sending, posting and CRM changes still need the user's click. Schedule times are wall-clock times in the task's time zone, so "Monday at 9" stays at 9 across daylight-saving changes; a run missed while the service was down happens once when it's back.
 
 ---
 
@@ -535,7 +535,7 @@ Steps use the existing agents (Data & Reporting, Sales & Outreach, Lead Research
 
 1. **Sign Up / Sign In** — Create an account with email + password (Supabase Auth)
 2. **Company Setup** — Enter company name, website, industry, description, and target audience location during onboarding
-3. **Pick an Agent** — Ask General (the default), or pick Lead Research, Sales & Outreach, Data & Reporting, Content & Copy or Operations in the task composer; attach a CSV or Excel file with the paperclip to ask about your own numbers
+3. **Pick an Agent** — Ask the Manager (the default), or pick Lead Research, Sales & Outreach, Data & Reporting, Content & Copy or Operations in the task composer; attach a CSV or Excel file with the paperclip to ask about your own numbers
 4. **Describe the Task** — Enter a natural-language request (e.g., *"Find 10 fintech startups in Southeast Asia"*)
 5. **Watch Progress** — The agent runs and pushes live step-by-step progress visible in the chat view
 6. **Review Results** — Lead Research shows a table of qualified companies with contacts and evidence; Sales & Outreach shows editable email/meeting draft cards; Data & Reporting shows a summary with number tiles, charts and tables (each with its calculation, a table view and CSV download); Content & Copy shows each piece's options, the recommended one marked, which you can edit and save (checked again on save), with character counters and any checks still worth a look
@@ -821,7 +821,7 @@ The frontend runs at `http://localhost:5173` and the backend at `http://localhos
 | `DELETE` | `/integrations/crm/{provider}` | ✅ Bearer | Disconnect a CRM |
 | `POST` | `/crm/requests/{id}/actions/{action_id}` | ✅ Bearer | Approve or discard a drafted CRM change |
 
-### General and Data & Reporting
+### Manager and Data & Reporting
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
@@ -1026,7 +1026,7 @@ Test coverage includes:
 - Full lead research pipeline (`test_pipeline.py`)
 - Sales outreach agent and executor (`test_outreach.py`)
 - Reply checking (`test_replies.py`)
-- General agent and conversation context (`test_general.py`)
+- Manager agent and conversation context (`test_general.py`)
 - CRM over MCP: tool classification, PKCE and encrypted state, Zoho URL checks, the agent loop and approvals against a real local MCP server, token refresh, each company's Salesforce app (domains, servers, sign-in and refresh), HubSpot endpoints from its metadata (`test_crm.py`)
 - Data & Reporting: file parsing, query checks and execution, summary number checks, live reply status (`test_data_reporting.py`)
 - Google Sheets: link parsing, reading tabs, new sheets (text never becomes a formula), the Sheets sign-in and one-account rule, linking and refreshing sheets as data files, exports (`test_google_sheets.py`)
@@ -1051,7 +1051,7 @@ The codebase defines several agent types that are registered in the UI but do no
 |---|---|---|
 | **Lead Research** | ✅ Implemented | Find and qualify companies as leads |
 | **Sales & Outreach** | ✅ Implemented | Draft and send emails, schedule meetings |
-| **General** | ✅ Implemented | Answers questions and routes tasks to specialist agents |
+| **Manager** | ✅ Implemented | Answers questions and routes tasks to specialist agents |
 | **Data & Reporting** | ✅ Implemented | Reports with charts from Agentis activity and uploaded files |
 | **Content & Copy** | ✅ Implemented | Social posts, threads, blog posts, Medium stories, emails, ad copy and any writing to your requirements; posts to LinkedIn and X, saves to Notion and Medium |
 | **Customer Support** | 🔜 Planned | Ticket resolution and routing |

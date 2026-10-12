@@ -20,7 +20,7 @@ export const AGENT_TYPES: {
 }[] = [
   {
     value: 'general',
-    label: 'General',
+    label: 'Manager',
     description: 'Answers questions and plans with you, and hands tasks to the right agent.',
     icon: HierarchyIcon,
   },

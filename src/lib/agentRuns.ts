@@ -35,7 +35,7 @@ export function isPlanActive(generalId: string): boolean {
   return activePlans.has(generalId)
 }
 
-// Runs can start other runs (the General agent handing a task to a
+// Runs can start other runs (the Manager handing a task to a
 // specialist), possibly after the component that started them unmounted, so
 // the dashboard listens here for new requests and their status changes.
 type RunEvent =

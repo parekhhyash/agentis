@@ -35,7 +35,7 @@ MAX_NAME = 80
 MAX_ACTIONS = 5
 
 AGENT_NAMES = {
-    "general": "General",
+    "general": "Manager",
     "lead_research": "Lead Research",
     "sales_outreach": "Sales & Outreach",
     "data_reporting": "Data & Reporting",

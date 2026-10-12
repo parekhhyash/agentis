@@ -55,7 +55,7 @@ touches that user's rows.
 ## CRMs over MCP (HubSpot, Salesforce, Zoho CRM)
 
 ```
-General decides a message is about the CRM (route "crm")
+The Manager (`general`) decides a message is about the CRM (route "crm")
   -> Connect    MCP session per connected CRM (integrations/mcp/client.py, on
                 the official MCP SDK); HubSpot/Salesforce with a fresh OAuth
                 token (refreshed and retried once if rejected), Zoho by URL
@@ -214,7 +214,7 @@ minute while a task is due or running; while awake the backend also checks
 every `OPERATIONS_SCHEDULER_INTERVAL_SECONDS`. `claim_due_scheduled_tasks`
 locks due tasks so a run happens once. A run moves `next_run_at` on first,
 then runs each step through the chat's own runner as a new turn of the
-task's chat (a General step that hands off runs the specialist too), stops
+task's chat (a Manager step that hands off runs the specialist too), stops
 at the first failed step, records the run, pauses the task after 3 failed
 runs in a row and, if asked, emails a summary from the user's Gmail.
 Steps only draft: approvals happen in the chat as usual.

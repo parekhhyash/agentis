@@ -102,7 +102,7 @@ export default function DashboardPage() {
     const name = crmProvider && crmProvider in CRM_NAMES ? CRM_NAMES[crmProvider] : 'Your CRM'
     setNotice(
       crmResult === 'connected'
-        ? { tone: 'ok', text: `${name} connected. Ask General about your contacts, companies and deals, or to update them.` }
+        ? { tone: 'ok', text: `${name} connected. Ask the Manager about your contacts, companies and deals, or to update them.` }
         : { tone: 'error', text: returnMessage ?? `${name} could not be connected.` },
     )
   }
@@ -166,7 +166,7 @@ export default function DashboardPage() {
     })
   }, [user])
 
-  // Turns started by other runs (the General agent handing off) and their
+  // Turns started by other runs (the Manager handing off) and their
   // progress, even when the run began before this page mounted.
   useEffect(
     () =>
@@ -561,7 +561,7 @@ export default function DashboardPage() {
                 {firstName ? `Welcome back, ${firstName}` : 'Welcome back'}
               </h1>
               <p className="mt-2 text-slate-500">
-                Ask General anything, from questions to plans. It answers, or hands the
+                Ask the Manager anything, from questions to plans. It answers, or hands the
                 task to the right agent. Attach a CSV or Excel file to ask about your numbers,
                 or ask Operations to put any of it on a schedule.
               </p>

@@ -38,7 +38,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(
     title="Agentis Agent API",
     description=(
-        "Backend API exposing Agentis's AI agents (General, Lead Research, Sales & Outreach, "
+        "Backend API exposing Agentis's AI agents (Manager, Lead Research, Sales & Outreach, "
         "Data & Reporting, Content & Copy, Operations)."
     ),
     version="0.1.0",

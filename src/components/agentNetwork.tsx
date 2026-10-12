@@ -175,7 +175,7 @@ export function AgentWork({ agent }: { agent: number }) {
 // The dashboard's live version: the agent running the request works at its
 // node, fed from the hub; when it's using another agent's output (e.g.
 // Outreach writing to Lead Research's leads), that hand-off flows between
-// the two. `agent` null means the General agent, working from the hub.
+// the two. `agent` null means the Manager, working from the hub.
 export function LiveAgentNetwork({
   agent,
   status,

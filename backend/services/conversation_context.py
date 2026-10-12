@@ -14,7 +14,7 @@ from services.uuid_utils import is_valid_request_id
 MAX_TURNS = 12
 
 AGENT_LABELS = {
-    "general": "General",
+    "general": "Manager",
     "lead_research": "Lead Research",
     "sales_outreach": "Sales & Outreach",
     "data_reporting": "Data & Reporting",

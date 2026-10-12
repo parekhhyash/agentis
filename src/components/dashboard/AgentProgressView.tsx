@@ -60,7 +60,7 @@ export default function AgentProgressView({
   const [expanded, setExpanded] = useState(false)
   const node = AGENT_NODE[agentType] ?? null
   const handoff = handoffFor(agentType, progress)
-  const label = node !== null ? AGENTS[node].label : 'General'
+  const label = node !== null ? AGENTS[node].label : 'Manager'
 
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
@@ -71,7 +71,7 @@ export default function AgentProgressView({
             handoff
               ? `${label} is using your ${handoff.carry.replace(/^\d+ /, '')}`
               : node === null
-                ? 'General is thinking'
+                ? 'Manager is thinking'
                 : `${label} is working`
           }
           handoffFrom={handoff?.from}

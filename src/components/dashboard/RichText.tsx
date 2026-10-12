@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 
-// Renders the small Markdown subset the General agent writes (headings,
+// Renders the small Markdown subset the Manager writes (headings,
 // bullet and numbered lists, paragraphs, **bold**, `code`, links) as React
 // elements. No HTML is ever injected.
 

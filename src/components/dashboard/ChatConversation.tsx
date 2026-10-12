@@ -81,7 +81,7 @@ export default function ChatConversation({
       {handedOff ? (
         <div className="flex items-start gap-3 rounded-xl border border-dashed border-slate-300 px-4 py-3">
           <span className="mt-0.5 shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap text-slate-600">
-            General &rarr; {AGENT_LABELS[request.agent_type]}
+            Manager &rarr; {AGENT_LABELS[request.agent_type]}
             {handoffStep && handoffStep.total > 1 && (
               <span className="font-normal text-slate-500">
                 {' '}

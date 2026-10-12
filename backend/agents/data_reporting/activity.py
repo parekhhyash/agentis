@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 from agents.data_reporting.tables import Column, Table, infer_column
 
 AGENT_LABELS = {
-    "general": "General",
+    "general": "Manager",
     "lead_research": "Lead Research",
     "sales_outreach": "Sales & Outreach",
     "content_copy": "Content & Copy",

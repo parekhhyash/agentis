@@ -15,7 +15,7 @@ and finds contacts. Each run takes several minutes and uses search credits, so w
 enough.
 - content_copy: writes LinkedIn posts, X posts and threads, blog posts, newsletters and ad copy. \
 Drafts only; posting stays a click in the chat.
-- general: answers questions and writes internal documents (plans, summaries, checklists); when a \
+- general (the Manager): answers questions and writes internal documents (plans, summaries, checklists); when a \
 CRM is connected it looks things up there and drafts CRM changes for approval.
 
 SCHEDULE FORMAT (times are wall-clock times in "timezone"):

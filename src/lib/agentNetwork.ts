@@ -41,7 +41,7 @@ export function arcPath(from: number, to: number): string {
   return `M ${a.x} ${a.y} A ${ORBIT} ${ORBIT} 0 0 ${clockwise ? 1 : 0} ${b.x} ${b.y}`
 }
 
-// Which node each agent type sits on; the General agent works from the hub.
+// Which node each agent type sits on; the Manager works from the hub.
 export const AGENT_NODE: Partial<Record<AgentType, number>> = {
   lead_research: 0,
   sales_outreach: 1,

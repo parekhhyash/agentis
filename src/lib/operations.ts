@@ -81,7 +81,7 @@ export function isOperationsResult(value: unknown): value is OperationsResult {
 }
 
 export const STEP_LABELS: Record<StepAgent, string> = {
-  general: 'General',
+  general: 'Manager',
   lead_research: 'Lead Research',
   sales_outreach: 'Sales & Outreach',
   data_reporting: 'Data & Reporting',
