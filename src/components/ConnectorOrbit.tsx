@@ -3,11 +3,11 @@ import { useEffect, useRef, useState } from 'react'
 import { CONNECTORS } from '../lib/connectors'
 
 // Every app Agentis connects to, circling the Agentis mark on two tilted
-// elliptical orbits (in opposite directions). The inner one is a planet's
-// ring: wider than the mark but not as tall, so it crosses it, its front
-// half drawn over the mark and its back half behind. Logos in front grow and pass over the
-// mark; those behind shrink, fade and pass under it. Drawn without tiles,
-// like the Connect page.
+// elliptical orbits (in opposite directions), with no orbit lines drawn. The
+// inner one is like a planet's ring: wider than the mark but not as tall, so
+// its logos cross it. Logos in front grow and pass over the mark; those
+// behind shrink, fade and pass under it. Drawn without tiles, like the
+// Connect page.
 
 type Orbiter = { src: string; name: string; mono: boolean; wide: boolean }
 
@@ -42,21 +42,6 @@ function ringsFor(width: number, planet: number) {
   ]
 }
 
-// Half of a tilted ellipse as an SVG path: the near half (through the
-// bottom) or the far half (through the top).
-function halfEllipse(cx: number, cy: number, rx: number, ry: number, near: boolean): string {
-  const at = (t: number) => {
-    const x = Math.cos(t) * rx
-    const y = Math.sin(t) * ry
-    return `${cx + x * Math.cos(TILT) - y * Math.sin(TILT)} ${cy + x * Math.sin(TILT) + y * Math.cos(TILT)}`
-  }
-  const [from, to] = near ? [at(0), at(Math.PI)] : [at(Math.PI), at(Math.PI * 2)]
-  return `M ${from} A ${rx} ${ry} ${(TILT * 180) / Math.PI} 0 1 ${to}`
-}
-
-// One light dotted line for every orbit, front and back.
-const PATH = { fill: 'none', strokeWidth: 1.5, strokeDasharray: '2 8', strokeLinecap: 'round' as const, className: 'stroke-slate-300' }
-
 function reducedMotion(): boolean {
   return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 }
@@ -79,9 +64,6 @@ export default function ConnectorOrbit() {
   }, [])
 
   const rings = ringsFor(size.w, size.r)
-  const [outer, inner] = rings
-  const cx = size.w / 2
-  const cy = size.h / 2
 
   useEffect(() => {
     if (!size.w) return
@@ -147,16 +129,6 @@ export default function ConnectorOrbit() {
         </div>
 
         <div ref={stageRef} aria-hidden="true" className="relative mx-auto h-[20rem] w-full max-w-5xl sm:h-[28rem] lg:h-[30rem]">
-          {/* Behind the mark: the outer orbit and the inner ring's far half. */}
-          <svg className="absolute inset-0 z-0 h-full w-full overflow-visible">
-            {size.w > 0 && (
-              <>
-                <ellipse cx={cx} cy={cy} rx={outer.rx} ry={outer.ry} transform={`rotate(${(TILT * 180) / Math.PI} ${cx} ${cy})`} {...PATH} />
-                <path d={halfEllipse(cx, cy, inner.rx, inner.ry, false)} {...PATH} />
-              </>
-            )}
-          </svg>
-
           {/* Agentis, the planet the inner ring goes round. */}
           <span
             ref={planetRef}
@@ -164,11 +136,6 @@ export default function ConnectorOrbit() {
           >
             <span className="font-display text-xl leading-none text-slate-900 sm:text-3xl">Agentis</span>
           </span>
-
-          {/* In front of the mark: the inner ring's near half. */}
-          <svg className="pointer-events-none absolute inset-0 z-[25] h-full w-full overflow-visible">
-            {size.w > 0 && <path d={halfEllipse(cx, cy, inner.rx, inner.ry, true)} {...PATH} />}
-          </svg>
 
           {size.w > 0 &&
             rings.flatMap((ring) =>
