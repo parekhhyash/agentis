@@ -587,7 +587,7 @@ function PieceCard({
                   disabled={overLimit}
                   title={overLimit ? 'Shorten it to fit the limit first' : `Opens ${NETWORK[network]} with this post ready; you press Post`}
                   onClick={() => (network === 'x' ? void openInX() : openInLinkedIn())}
-                  className="rounded-full bg-ink px-3.5 py-1 text-sm font-semibold text-white hover:bg-ink/90 disabled:opacity-50 dark:bg-white dark:text-ink"
+                  className="rounded-full bg-ink px-3.5 py-1 text-sm font-semibold text-white hover:bg-ink/90 disabled:opacity-50 dark:bg-white dark:text-ink dark:hover:bg-white/85"
                 >
                   Open in {NETWORK[network]}
                 </button>
