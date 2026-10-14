@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
+import authBgDark from '../assets/auth-bg-login-dark.webp'
 import authBg from '../assets/auth-bg-login.png'
 import AuthLayout from '../components/AuthLayout'
 import { GoogleIcon } from '../components/icons'
@@ -37,6 +38,7 @@ export default function LoginPage() {
   return (
     <AuthLayout
       image={authBg}
+      darkImage={authBgDark}
       headline="Welcome back to your AI workforce."
       subtext="Sign in to check in on every agent running your company."
     >

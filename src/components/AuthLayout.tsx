@@ -1,15 +1,18 @@
 import { Link } from 'react-router-dom'
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 
 import ThemeToggle from './ThemeToggle'
 
 export default function AuthLayout({
   image,
+  darkImage,
   headline,
   subtext,
   children,
 }: {
   image: string
+  // The night version for dark mode, anchored left so its flowers frame the panel.
+  darkImage?: string
   headline: string
   subtext: string
   children: ReactNode
@@ -18,14 +21,17 @@ export default function AuthLayout({
     <div className="relative flex min-h-screen bg-page">
       <ThemeToggle className="absolute top-5 right-5 z-10 text-slate-500 hover:bg-slate-100" />
       <div
-        className="relative hidden w-1/2 bg-cover bg-center lg:block"
-        style={{ backgroundImage: `url(${image})` }}
+        className={`relative hidden w-1/2 bg-(image:--auth-light) bg-cover bg-center lg:block ${
+          darkImage ? 'dark:bg-(image:--auth-dark) dark:bg-left' : ''
+        }`}
+        style={{ '--auth-light': `url(${image})`, '--auth-dark': `url(${darkImage ?? image})` } as CSSProperties}
       >
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/5 to-transparent" />
 
         <Link
           to="/"
-          className="font-display absolute top-8 left-8 text-2xl text-white"
+          // A soft shadow keeps it readable where it sits over bright flowers.
+          className="font-display absolute top-8 left-8 text-2xl text-white [text-shadow:0_1px_12px_rgb(0_0_0/0.6)]"
         >
           Agentis
         </Link>

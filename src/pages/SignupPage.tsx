@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
+import authBgDark from '../assets/auth-bg-signup-dark.webp'
 import authBg from '../assets/auth-bg-signup.png'
 import AuthLayout from '../components/AuthLayout'
 import { GoogleIcon } from '../components/icons'
@@ -45,6 +46,7 @@ export default function SignupPage() {
   return (
     <AuthLayout
       image={authBg}
+      darkImage={authBgDark}
       headline="Run your company with a team that never sleeps."
       subtext="Create your account and put your first AI agent to work today."
     >
