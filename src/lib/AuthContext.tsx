@@ -20,12 +20,23 @@ type AuthContextValue = {
   loading: boolean
   signUp: (
     details: SignUpDetails,
-  ) => Promise<{ error: string | null; needsEmailConfirmation: boolean }>
+  ) => Promise<{
+    error: string | null
+    needsEmailConfirmation: boolean
+    alreadyRegistered: boolean
+  }>
   signIn: (
     email: string,
     password: string,
   ) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
+}
+
+function signUpErrorMessage(code: string | undefined, message: string) {
+  if (code === 'over_email_send_rate_limit') {
+    return 'Too many sign-ups in the last hour, so we can’t send the confirmation email right now. Try again in a little while.'
+  }
+  return message
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -60,9 +71,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         emailRedirectTo: authRedirect('/login?confirmed=1'),
       },
     })
+    if (error) {
+      return {
+        error: signUpErrorMessage(error.code, error.message),
+        needsEmailConfirmation: false,
+        alreadyRegistered: false,
+      }
+    }
+    // Supabase answers a sign-up for an email that already has a confirmed
+    // account like a new one but sends no email; the user it returns has no
+    // identities.
+    const alreadyRegistered = data.user?.identities?.length === 0
     return {
-      error: error?.message ?? null,
-      needsEmailConfirmation: !error && !data.session,
+      error: null,
+      needsEmailConfirmation: !alreadyRegistered && !data.session,
+      alreadyRegistered,
     }
   }
 

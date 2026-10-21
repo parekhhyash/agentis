@@ -14,6 +14,7 @@ export default function SignupPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [checkEmail, setCheckEmail] = useState(false)
+  const [registered, setRegistered] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
   if (!loading && user) {
@@ -23,9 +24,10 @@ export default function SignupPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
+    setRegistered(false)
     setSubmitting(true)
 
-    const { error, needsEmailConfirmation } = await signUp({
+    const { error, needsEmailConfirmation, alreadyRegistered } = await signUp({
       fullName,
       email,
       password,
@@ -35,6 +37,8 @@ export default function SignupPage() {
 
     if (error) {
       setError(error)
+    } else if (alreadyRegistered) {
+      setRegistered(true)
     } else if (needsEmailConfirmation) {
       setCheckEmail(true)
     } else {
@@ -71,6 +75,14 @@ export default function SignupPage() {
             {error && (
               <p className="rounded-lg bg-red-50 px-3.5 py-2.5 text-sm text-red-600">
                 {error}
+              </p>
+            )}
+            {registered && (
+              <p className="rounded-lg bg-sky-50 px-3.5 py-2.5 text-sm text-slate-700">
+                An account with this email already exists.{' '}
+                <Link to="/login" className="font-medium text-sky-600 hover:text-sky-700">
+                  Log in instead
+                </Link>
               </p>
             )}
 
