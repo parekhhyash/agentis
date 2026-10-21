@@ -54,7 +54,7 @@ export default function ScrollReveal() {
 
   return (
     <section ref={sectionRef} className="relative bg-page" style={{ height: '250vh' }}>
-      <div className="sticky top-0 flex h-screen items-center justify-center overflow-x-clip px-6">
+      <div className="sticky top-(--banner-h) flex h-[calc(100vh-var(--banner-h))] items-center justify-center overflow-x-clip px-6">
         <div
           aria-hidden="true"
           className="pointer-events-none absolute top-1/2 left-1/2 h-[28rem] w-[28rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-brand-sky/10 blur-3xl"

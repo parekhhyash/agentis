@@ -1,4 +1,5 @@
 import { HashRouter, Route, Routes } from 'react-router-dom'
+import BackendNotice from './components/BackendNotice'
 import ProtectedRoute from './components/ProtectedRoute'
 import { AuthProvider } from './lib/AuthContext'
 import CompanySettingsPage from './pages/CompanySettingsPage'
@@ -12,6 +13,7 @@ function App() {
   return (
     <HashRouter>
       <AuthProvider>
+        <BackendNotice />
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />

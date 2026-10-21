@@ -18,7 +18,7 @@ export default function AuthLayout({
   children: ReactNode
 }) {
   return (
-    <div className="relative flex min-h-screen bg-page">
+    <div className="relative flex min-h-[calc(100vh-var(--banner-h))] bg-page">
       <ThemeToggle className="absolute top-5 right-5 z-10 text-slate-500 hover:bg-slate-100" />
       <div
         className={`relative hidden w-1/2 bg-(image:--auth-light) bg-cover bg-center lg:block ${

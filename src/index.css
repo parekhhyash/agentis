@@ -161,8 +161,14 @@
   }
 }
 
+/* Height of the backend notice bar (BackendNotice) while it shows; the page
+   starts below it. */
+:root {
+  --banner-h: 0px;
+}
+
 html {
-  scroll-padding-top: 110px;
+  scroll-padding-top: calc(110px + var(--banner-h));
 }
 
 /* Tailwind v4 dropped the pointer cursor on buttons; restore it for every
@@ -238,6 +244,7 @@ body,
 
 body {
   margin: 0;
+  padding-top: var(--banner-h);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

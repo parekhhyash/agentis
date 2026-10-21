@@ -436,7 +436,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="relative flex h-screen overflow-hidden bg-slate-50">
+    <div className="relative flex h-[calc(100vh-var(--banner-h))] overflow-hidden bg-slate-50">
       {sidebarOpen && (
         <div
           className="absolute inset-0 z-10 bg-black/40 sm:hidden"

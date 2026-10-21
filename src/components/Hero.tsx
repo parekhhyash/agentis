@@ -78,7 +78,7 @@ function Navbar({ dark }: { dark: boolean }) {
 
   return (
     <nav
-      className={`fixed top-6 left-1/2 z-20 w-[95%] max-w-3xl -translate-x-1/2 border transition-[background-color,border-color,box-shadow] duration-300 ${
+      className={`fixed top-[calc(var(--banner-h)+1.5rem)] left-1/2 z-20 w-[95%] max-w-3xl -translate-x-1/2 border transition-[background-color,border-color,box-shadow] duration-300 ${
         menuOpen ? 'rounded-3xl' : 'rounded-full'
       } ${panel}`}
     >
