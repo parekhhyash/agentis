@@ -647,6 +647,14 @@ Run the Google connections migration:
 -- File: supabase/migrations/20261007000000_google_connections.sql
 ```
 
+**Auth URLs.** In Supabase: Authentication > URL Configuration, set **Site URL** to the frontend (`https://agentis-new.vercel.app`) and add **Redirect URLs** `https://agentis-new.vercel.app/**` and `http://localhost:5173/**`. Confirmation emails link to Supabase, which confirms the address and then sends the browser to the app's login page (`#/login?confirmed=1`); left at its default (`http://localhost:3000`), the email still gets confirmed but the browser lands on a page that doesn't load. The client uses Supabase's PKCE flow, so sign-ins come back as `?code=...`, which doesn't clash with the HashRouter's `#/routes`.
+
+**Sign in with Google** (login and signup):
+1. In Google Cloud Console, create an OAuth client (Web application) with the Authorized redirect URI `https://<project-ref>.supabase.co/auth/v1/callback` and Authorized JavaScript origins for the frontend. A separate Google Cloud project from the Gmail/Sheets one keeps sign-in to the basic scopes (`openid`, `email`, `profile`), so its consent screen can be published for everyone without Google's review.
+2. In Supabase: Authentication > Sign In / Providers > Google, turn it on and paste the client ID and secret.
+
+The first Google sign-in creates the account; the `profiles` trigger takes the name from Google. Signing in with Google doesn't connect Gmail: that's still its own permission on the Connect page.
+
 ### 5. Google OAuth Setup (Optional — required for Sales & Outreach)
 
 1. In [Google Cloud Console](https://console.cloud.google.com):

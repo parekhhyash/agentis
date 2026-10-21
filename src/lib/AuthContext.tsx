@@ -6,7 +6,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { supabase } from './supabase'
+import { authRedirect, supabase } from './supabase'
 
 type SignUpDetails = {
   email: string
@@ -25,6 +25,7 @@ type AuthContextValue = {
     email: string,
     password: string,
   ) => Promise<{ error: string | null }>
+  signInWithGoogle: () => Promise<{ error: string | null }>
   signOut: () => Promise<void>
 }
 
@@ -56,6 +57,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       password,
       options: {
         data: { full_name: fullName },
+        // The confirmation link comes back to the login page of this app.
+        emailRedirectTo: authRedirect('/login?confirmed=1'),
       },
     })
     return {
@@ -72,6 +75,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: error?.message ?? null }
   }
 
+  // Off to Google's sign-in, then back to the login page, which moves on to
+  // the dashboard once Supabase has the session. New accounts get a profile
+  // from the database trigger, with the name from Google.
+  async function signInWithGoogle() {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: authRedirect('/login') },
+    })
+    return { error: error?.message ?? null }
+  }
+
   async function signOut() {
     await supabase.auth.signOut()
   }
@@ -84,6 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         signUp,
         signIn,
+        signInWithGoogle,
         signOut,
       }}
     >

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, Navigate, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import authBgDark from '../assets/auth-bg-login-dark.webp'
 import authBg from '../assets/auth-bg-login.png'
 import AuthLayout from '../components/AuthLayout'
@@ -7,13 +7,20 @@ import { GoogleIcon } from '../components/icons'
 import { useAuth } from '../lib/AuthContext'
 
 export default function LoginPage() {
-  const { user, loading, signIn } = useAuth()
+  const { user, loading, signIn, signInWithGoogle } = useAuth()
   const navigate = useNavigate()
+  // Back from the email confirmation link (#/login?confirmed=1).
+  const [searchParams] = useSearchParams()
+  const confirmed = searchParams.get('confirmed') === '1'
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState<string | null>(null)
+  // Google sign-in that failed or was cancelled comes back as ?error_description=...
+  const [error, setError] = useState<string | null>(() =>
+    new URLSearchParams(window.location.search).get('error_description'),
+  )
   const [submitting, setSubmitting] = useState(false)
+  const [googleBusy, setGoogleBusy] = useState(false)
 
   if (!loading && user) {
     return <Navigate to="/dashboard" replace />
@@ -35,6 +42,17 @@ export default function LoginPage() {
     }
   }
 
+  async function continueWithGoogle() {
+    setError(null)
+    setGoogleBusy(true)
+    const { error } = await signInWithGoogle()
+    // On success the browser is already on its way to Google.
+    if (error) {
+      setError(error)
+      setGoogleBusy(false)
+    }
+  }
+
   return (
     <AuthLayout
       image={authBg}
@@ -52,12 +70,20 @@ export default function LoginPage() {
         </Link>
       </p>
 
+      {confirmed && !error && (
+        <p className="mt-6 rounded-lg bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-700">
+          Your email is confirmed. Log in to continue.
+        </p>
+      )}
+
       <button
         type="button"
-        className="mt-8 flex w-full items-center justify-center gap-2 rounded-full border border-slate-300 py-2.5 text-[15px] font-medium text-slate-700 transition-colors hover:bg-slate-50"
+        onClick={() => void continueWithGoogle()}
+        disabled={googleBusy}
+        className="mt-8 flex w-full items-center justify-center gap-2 rounded-full border border-slate-300 py-2.5 text-[15px] font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-60"
       >
         <GoogleIcon />
-        Continue with Google
+        {googleBusy ? 'Opening Google…' : 'Continue with Google'}
       </button>
 
       <div className="my-6 flex items-center gap-4">

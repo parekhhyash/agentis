@@ -7,7 +7,7 @@ import { GoogleIcon } from '../components/icons'
 import { useAuth } from '../lib/AuthContext'
 
 export default function SignupPage() {
-  const { user, loading, signUp } = useAuth()
+  const { user, loading, signUp, signInWithGoogle } = useAuth()
   const navigate = useNavigate()
 
   const [fullName, setFullName] = useState('')
@@ -16,6 +16,7 @@ export default function SignupPage() {
   const [error, setError] = useState<string | null>(null)
   const [checkEmail, setCheckEmail] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [googleBusy, setGoogleBusy] = useState(false)
 
   if (!loading && user) {
     return <Navigate to="/dashboard" replace />
@@ -40,6 +41,17 @@ export default function SignupPage() {
       setCheckEmail(true)
     } else {
       navigate('/dashboard')
+    }
+  }
+
+  // Signing up with Google creates the account on the first sign-in.
+  async function continueWithGoogle() {
+    setError(null)
+    setGoogleBusy(true)
+    const { error } = await signInWithGoogle()
+    if (error) {
+      setError(error)
+      setGoogleBusy(false)
     }
   }
 
@@ -70,10 +82,12 @@ export default function SignupPage() {
         <>
           <button
             type="button"
-            className="mt-8 flex w-full items-center justify-center gap-2 rounded-full border border-slate-300 py-2.5 text-[15px] font-medium text-slate-700 transition-colors hover:bg-slate-50"
+            onClick={() => void continueWithGoogle()}
+            disabled={googleBusy}
+            className="mt-8 flex w-full items-center justify-center gap-2 rounded-full border border-slate-300 py-2.5 text-[15px] font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-60"
           >
             <GoogleIcon />
-            Continue with Google
+            {googleBusy ? 'Opening Google…' : 'Continue with Google'}
           </button>
 
           <div className="my-6 flex items-center gap-4">
