@@ -3,11 +3,10 @@ import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import authBgDark from '../assets/auth-bg-login-dark.webp'
 import authBg from '../assets/auth-bg-login.png'
 import AuthLayout from '../components/AuthLayout'
-import { GoogleIcon } from '../components/icons'
 import { useAuth } from '../lib/AuthContext'
 
 export default function LoginPage() {
-  const { user, loading, signIn, signInWithGoogle } = useAuth()
+  const { user, loading, signIn } = useAuth()
   const navigate = useNavigate()
   // Back from the email confirmation link (#/login?confirmed=1).
   const [searchParams] = useSearchParams()
@@ -15,12 +14,11 @@ export default function LoginPage() {
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  // Google sign-in that failed or was cancelled comes back as ?error_description=...
+  // An expired or already used confirmation link comes back as ?error_description=...
   const [error, setError] = useState<string | null>(() =>
     new URLSearchParams(window.location.search).get('error_description'),
   )
   const [submitting, setSubmitting] = useState(false)
-  const [googleBusy, setGoogleBusy] = useState(false)
 
   if (!loading && user) {
     return <Navigate to="/dashboard" replace />
@@ -39,17 +37,6 @@ export default function LoginPage() {
       setError(error)
     } else {
       navigate('/dashboard')
-    }
-  }
-
-  async function continueWithGoogle() {
-    setError(null)
-    setGoogleBusy(true)
-    const { error } = await signInWithGoogle()
-    // On success the browser is already on its way to Google.
-    if (error) {
-      setError(error)
-      setGoogleBusy(false)
     }
   }
 
@@ -76,23 +63,7 @@ export default function LoginPage() {
         </p>
       )}
 
-      <button
-        type="button"
-        onClick={() => void continueWithGoogle()}
-        disabled={googleBusy}
-        className="mt-8 flex w-full items-center justify-center gap-2 rounded-full border border-slate-300 py-2.5 text-[15px] font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-60"
-      >
-        <GoogleIcon />
-        {googleBusy ? 'Opening Google…' : 'Continue with Google'}
-      </button>
-
-      <div className="my-6 flex items-center gap-4">
-        <div className="h-px flex-1 bg-slate-200" />
-        <span className="text-xs text-slate-400 uppercase">or</span>
-        <div className="h-px flex-1 bg-slate-200" />
-      </div>
-
-      <form className="space-y-5" onSubmit={handleSubmit}>
+      <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
         {error && (
           <p className="rounded-lg bg-red-50 px-3.5 py-2.5 text-sm text-red-600">
             {error}

@@ -3,11 +3,10 @@ import { Link, Navigate, useNavigate } from 'react-router-dom'
 import authBgDark from '../assets/auth-bg-signup-dark.webp'
 import authBg from '../assets/auth-bg-signup.png'
 import AuthLayout from '../components/AuthLayout'
-import { GoogleIcon } from '../components/icons'
 import { useAuth } from '../lib/AuthContext'
 
 export default function SignupPage() {
-  const { user, loading, signUp, signInWithGoogle } = useAuth()
+  const { user, loading, signUp } = useAuth()
   const navigate = useNavigate()
 
   const [fullName, setFullName] = useState('')
@@ -16,7 +15,6 @@ export default function SignupPage() {
   const [error, setError] = useState<string | null>(null)
   const [checkEmail, setCheckEmail] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [googleBusy, setGoogleBusy] = useState(false)
 
   if (!loading && user) {
     return <Navigate to="/dashboard" replace />
@@ -41,17 +39,6 @@ export default function SignupPage() {
       setCheckEmail(true)
     } else {
       navigate('/dashboard')
-    }
-  }
-
-  // Signing up with Google creates the account on the first sign-in.
-  async function continueWithGoogle() {
-    setError(null)
-    setGoogleBusy(true)
-    const { error } = await signInWithGoogle()
-    if (error) {
-      setError(error)
-      setGoogleBusy(false)
     }
   }
 
@@ -80,23 +67,7 @@ export default function SignupPage() {
         </div>
       ) : (
         <>
-          <button
-            type="button"
-            onClick={() => void continueWithGoogle()}
-            disabled={googleBusy}
-            className="mt-8 flex w-full items-center justify-center gap-2 rounded-full border border-slate-300 py-2.5 text-[15px] font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-60"
-          >
-            <GoogleIcon />
-            {googleBusy ? 'Opening Google…' : 'Continue with Google'}
-          </button>
-
-          <div className="my-6 flex items-center gap-4">
-            <div className="h-px flex-1 bg-slate-200" />
-            <span className="text-xs text-slate-400 uppercase">or</span>
-            <div className="h-px flex-1 bg-slate-200" />
-          </div>
-
-          <form className="space-y-5" onSubmit={handleSubmit}>
+          <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
             {error && (
               <p className="rounded-lg bg-red-50 px-3.5 py-2.5 text-sm text-red-600">
                 {error}

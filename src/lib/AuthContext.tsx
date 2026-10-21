@@ -25,7 +25,6 @@ type AuthContextValue = {
     email: string,
     password: string,
   ) => Promise<{ error: string | null }>
-  signInWithGoogle: () => Promise<{ error: string | null }>
   signOut: () => Promise<void>
 }
 
@@ -75,17 +74,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: error?.message ?? null }
   }
 
-  // Off to Google's sign-in, then back to the login page, which moves on to
-  // the dashboard once Supabase has the session. New accounts get a profile
-  // from the database trigger, with the name from Google.
-  async function signInWithGoogle() {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: authRedirect('/login') },
-    })
-    return { error: error?.message ?? null }
-  }
-
   async function signOut() {
     await supabase.auth.signOut()
   }
@@ -98,7 +86,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         signUp,
         signIn,
-        signInWithGoogle,
         signOut,
       }}
     >
