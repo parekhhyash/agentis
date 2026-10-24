@@ -151,7 +151,7 @@ The system is built as a **React + TypeScript** frontend (Vite) paired with a **
 ## Project Structure
 
 ```
-agentis_new/
+agentis/
 ├── index.html                    # App entry point (dark mode script, fonts)
 ├── package.json                  # Frontend dependencies and scripts
 ├── vite.config.ts                # Vite configuration
@@ -596,8 +596,8 @@ Steps use the existing agents (Data & Reporting, Sales & Outreach, Lead Research
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/parekhhyash/agentis_new.git
-cd agentis_new
+git clone https://github.com/parekhhyash/agentis.git
+cd agentis
 ```
 
 ### 2. Frontend Setup
@@ -647,7 +647,7 @@ Run the Google connections migration:
 -- File: supabase/migrations/20261007000000_google_connections.sql
 ```
 
-**Auth URLs.** In Supabase: Authentication > URL Configuration, set **Site URL** to the frontend (`https://agentis-new.vercel.app`) and add **Redirect URLs** `https://agentis-new.vercel.app/**` and `http://localhost:5173/**`. Confirmation emails link to Supabase, which confirms the address and then sends the browser to the app's login page (`#/login?confirmed=1`); left at its default (`http://localhost:3000`), the email still gets confirmed but the browser lands on a page that doesn't load. The client uses Supabase's PKCE flow, so the link comes back as `?code=...`, which doesn't clash with the HashRouter's `#/routes`.
+**Auth URLs.** In Supabase: Authentication > URL Configuration, set **Site URL** to the frontend (`https://agentislabs.vercel.app`) and add **Redirect URLs** `https://agentislabs.vercel.app/**` and `http://localhost:5173/**`. Confirmation emails link to Supabase, which confirms the address and then sends the browser to the app's login page (`#/login?confirmed=1`); left at its default (`http://localhost:3000`), the email still gets confirmed but the browser lands on a page that doesn't load. The client uses Supabase's PKCE flow, so the link comes back as `?code=...`, which doesn't clash with the HashRouter's `#/routes`.
 
 ### 5. Google OAuth Setup (Optional — required for Sales & Outreach)
 
