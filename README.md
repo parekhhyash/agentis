@@ -647,7 +647,7 @@ Run the Google connections migration:
 -- File: supabase/migrations/20261007000000_google_connections.sql
 ```
 
-**Auth URLs.** In Supabase: Authentication > URL Configuration, set **Site URL** to the frontend (`https://agentislabs.vercel.app`) and add **Redirect URLs** `https://agentislabs.vercel.app/**` and `http://localhost:5173/**`. Confirmation emails link to Supabase, which confirms the address and then sends the browser to the app's login page (`#/login?confirmed=1`); left at its default (`http://localhost:3000`), the email still gets confirmed but the browser lands on a page that doesn't load. The client uses Supabase's PKCE flow, so the link comes back as `?code=...`, which doesn't clash with the HashRouter's `#/routes`.
+**Auth URLs.** In Supabase: Authentication > URL Configuration, set **Site URL** to the frontend (`https://tryagentis.vercel.app`) and add **Redirect URLs** `https://tryagentis.vercel.app/**` and `http://localhost:5173/**`. Confirmation emails link to Supabase, which confirms the address and then sends the browser to the app's login page (`#/login?confirmed=1`); left at its default (`http://localhost:3000`), the email still gets confirmed but the browser lands on a page that doesn't load. The client uses Supabase's PKCE flow, so the link comes back as `?code=...`, which doesn't clash with the HashRouter's `#/routes`.
 
 ### 5. Google OAuth Setup (Optional — required for Sales & Outreach)
 

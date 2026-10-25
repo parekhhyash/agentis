@@ -16,7 +16,7 @@ from agents.lead_research.state import ResearchState, ScrapedPage
 
 logger = logging.getLogger(__name__)
 
-USER_AGENT = "AgentisLeadResearchBot/1.0 (+https://agentislabs.vercel.app)"
+USER_AGENT = "AgentisLeadResearchBot/1.0 (+https://tryagentis.vercel.app)"
 
 _EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
 _LOW_VALUE_EMAIL_PREFIXES = ("noreply", "no-reply", "donotreply", "webmaster", "postmaster", "example")
