@@ -19,7 +19,7 @@ services:
       - key: OPENROUTER_MODEL
         value: openrouter/deepseek/deepseek-v4-flash-0731
       - key: CORS_ORIGINS
-        value: https://tryagentis.vercel.app,https://agentislabs.vercel.app,https://agentis-new.vercel.app,http://localhost:5173
+        value: https://tryagentis.vercel.app,http://localhost:5173
       - key: SUPABASE_URL
         value: https://btxxysgiwgmedcadeboz.supabase.co
       - key: GOOGLE_API_KEY
