@@ -846,7 +846,9 @@ The frontend runs at `http://localhost:5173` and the backend at `http://localhos
 |---|---|---|---|
 | `POST` | `/sales-agent/generate-leads` | ❌ | Run lead research with a natural-language query |
 | `POST` | `/sales-agent/cancel` | ❌ | Cancel a running lead research request |
-| `GET` | `/health` | ❌ | Health check |
+| `GET` | `/health` | ❌ | Health check (Render's) |
+| `GET` | `/ping` | ❌ | What the site checks to see whether the backend is awake |
+| `GET` | `/` | ❌ | A page saying the backend is running (the site's "starting the backend" bar links here) |
 
 **Request body** (`generate-leads`):
 ```json
