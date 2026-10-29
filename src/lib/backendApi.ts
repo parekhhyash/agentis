@@ -1,6 +1,6 @@
+import { BACKEND_URL } from './backendUrl'
+import { noteBackendAwake } from './backendStatus'
 import { supabase } from './supabase'
-
-export const BACKEND_URL = import.meta.env.VITE_SALES_AGENT_API_URL ?? 'http://localhost:8000'
 
 export class BackendApiError extends Error {
   status: number
@@ -31,6 +31,7 @@ export async function authedFetch<T>(path: string, init: RequestInit = {}): Prom
     if (err instanceof DOMException && err.name === 'AbortError') throw err
     throw new BackendApiError(`Could not reach the agent API at ${BACKEND_URL}.`, 0)
   }
+  noteBackendAwake()
 
   if (!response.ok) {
     const body = await response.json().catch(() => null)

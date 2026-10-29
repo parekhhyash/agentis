@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import { BACKEND_URL } from './backendApi'
+import { BACKEND_URL } from './backendUrl'
 
 export type BackendStatus = 'checking' | 'waking' | 'ready' | 'unreachable'
 
@@ -8,7 +8,7 @@ export type BackendStatus = 'checking' | 'waking' | 'ready' | 'unreachable'
 // Pinging it as soon as the site opens means it is usually up by the time
 // someone runs an agent.
 const ASLEEP_AFTER_MS = 2500 // no answer by then: it was asleep and is starting
-const ATTEMPT_MS = 45_000
+const ATTEMPT_MS = 30_000
 const RETRY_MS = 3000
 const GIVE_UP_MS = 3 * 60_000
 const RECHECK_AFTER_MS = 5 * 60_000
@@ -20,23 +20,39 @@ let started = false
 const listeners = new Set<() => void>()
 
 function setStatus(next: BackendStatus) {
+  if (next === status) return
   status = next
   listeners.forEach((listener) => listener())
 }
 
-async function healthy(): Promise<boolean> {
+// The API answered (this check or any other request), so it is up.
+export function noteBackendAwake() {
+  lastAwake = Date.now()
+  setStatus('ready')
+}
+
+async function pinged(): Promise<boolean> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), ATTEMPT_MS)
   try {
-    const response = await fetch(`${BACKEND_URL}/health`, {
+    // Its own path rather than /health (Render's health check), and a new URL
+    // each time so nothing on the way can answer from a cache.
+    const response = await fetch(`${BACKEND_URL}/ping?t=${Date.now()}`, {
       cache: 'no-store',
-      signal: AbortSignal.timeout(ATTEMPT_MS),
+      signal: controller.signal,
     })
     // While it starts, Render can answer with a page of its own instead.
     const body = await response.json().catch(() => null)
     return response.ok && body?.status === 'ok'
   } catch {
     return false
+  } finally {
+    clearTimeout(timer)
   }
 }
+
+// A function, so a change made by another request during an await is seen.
+const isReady = () => status === 'ready'
 
 async function check() {
   if (checking) return
@@ -47,16 +63,18 @@ async function check() {
     if (status === 'checking') setStatus('waking')
   }, ASLEEP_AFTER_MS)
 
-  let awake = await healthy()
-  while (!awake && Date.now() - begin < GIVE_UP_MS) {
+  while (!isReady() && Date.now() - begin < GIVE_UP_MS) {
+    if (await pinged()) {
+      noteBackendAwake()
+      break
+    }
+    if (isReady()) break
     setStatus('waking')
     await new Promise((resolve) => setTimeout(resolve, RETRY_MS))
-    awake = await healthy()
   }
   clearTimeout(slow)
-  if (awake) lastAwake = Date.now()
   checking = false
-  setStatus(awake ? 'ready' : 'unreachable')
+  if (!isReady()) setStatus('unreachable')
 }
 
 // Starts the API if it is asleep. Checks again when the tab comes back after

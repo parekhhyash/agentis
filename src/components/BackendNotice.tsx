@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { BACKEND_URL } from '../lib/backendApi'
+import { BACKEND_URL } from '../lib/backendUrl'
 import { useBackendStatus } from '../lib/backendStatus'
 import { CloseIcon, ExternalLinkIcon } from './icons'
 
