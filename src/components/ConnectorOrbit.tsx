@@ -6,8 +6,9 @@ import { CONNECTORS } from '../lib/connectors'
 // elliptical orbits (in opposite directions), with no orbit lines drawn. The
 // inner one is like a planet's ring: wider than the mark but not as tall, so
 // its logos cross it. Logos in front grow and pass over the mark; those
-// behind shrink, fade and pass under it. Each ring's logos keep speeding up
-// as they bunch together, then slowing down as they spread out again. Drawn
+// behind shrink, fade and pass under it. Each ring's logos ride it like a
+// rollercoaster train: they speed up and close ranks as they drop to the
+// bottom, then slow down and spread out as they climb back to the top. Drawn
 // without tiles, like the Connect page.
 
 type Orbiter = { src: string; name: string; mono: boolean; wide: boolean }
@@ -26,29 +27,35 @@ const INNER = LOGOS.filter((l) => INNER_NAMES.has(l.name))
 
 const TILT = (-14 * Math.PI) / 180
 
-// How a ring moves. Once every `breath` seconds its logos speed up from one
-// lap per `slowLap` seconds to one per `fastLap` while the gaps between them
-// shrink by `squeeze`, then slow down and spread out evenly again. `offset`
-// is how far into a breath the ring starts. With these numbers no logo ever
-// moves backwards while the group bunches up or spreads out.
-type Motion = { breath: number; slowLap: number; fastLap: number; squeeze: number; offset: number }
-const OUTER_MOTION: Motion = { breath: 24, slowLap: 55, fastLap: 12, squeeze: 0.5, offset: 0.15 }
-const INNER_MOTION: Motion = { breath: 17, slowLap: 40, fastLap: 9, squeeze: 0.45, offset: 0.6 }
+// How a ring's train rides. Gravity sets its speed from how high its middle
+// is on screen: one lap per `slowLap` seconds at the top, one per `fastLap` at
+// the bottom. The gap between neighbouring logos, as a share of an even
+// spread, goes from `loose` when it's slowest to `tight` when it's fastest.
+// With these numbers no logo ever moves backwards as the gaps change.
+type Motion = { slowLap: number; fastLap: number; tight: number; loose: number }
+const OUTER_MOTION: Motion = { slowLap: 60, fastLap: 9, tight: 0.45, loose: 0.82 }
+// The ring is small on phones, so its logos need bigger gaps not to pile up.
+const OUTER_MOTION_PHONE: Motion = { ...OUTER_MOTION, tight: 0.6, loose: 0.9 }
+const INNER_MOTION: Motion = { slowLap: 40, fastLap: 8, tight: 0.62, loose: 0.92 }
 
-// Each logo's angle on its ring, `t` seconds into the ring's motion. 0 is
-// the ring at rest: evenly spread.
-function anglesAt(count: number, direction: number, motion: Motion, t: number): number[] {
-  const slow = (2 * Math.PI) / motion.slowLap
-  const fast = (2 * Math.PI) / motion.fastLap
-  const w = (2 * Math.PI) / motion.breath
-  // 0 when evenly spread, 1 when bunched up.
-  const gathered = (1 - Math.cos(w * t)) / 2
-  // How far the group has gone: its speed rises and falls with `gathered`.
-  const travelled = slow * t + (fast - slow) * (t / 2 - Math.sin(w * t) / (2 * w))
-  const even = (2 * Math.PI) / count
-  const gap = even * (1 - motion.squeeze * gathered)
-  const middle = (count - 1) / 2
-  return Array.from({ length: count }, (_, i) => direction * (travelled + (i - middle) * gap))
+type Ring = { logos: Orbiter[]; rx: number; ry: number; motion: Motion; direction: number }
+
+// The train's speed (radians a second) with its middle at `angle`, and the
+// gap between its logos at that speed.
+function ride(ring: Ring, angle: number) {
+  const { slowLap, fastLap, tight, loose } = ring.motion
+  const slow = (2 * Math.PI) / slowLap
+  const fast = (2 * Math.PI) / fastLap
+  // How far down the ring that is on screen: 0 at the top, 1 at the bottom.
+  const a = ring.rx * Math.sin(TILT)
+  const b = ring.ry * Math.cos(TILT)
+  const height = Math.hypot(a, b)
+  const drop = (a * Math.cos(angle) + b * Math.sin(angle) + height) / (2 * height)
+  // As on a coaster, the energy it gains grows with how far it has dropped.
+  const speed = Math.sqrt(slow * slow + (fast * fast - slow * slow) * drop)
+  const even = (2 * Math.PI) / ring.logos.length
+  const gap = even * (loose - ((loose - tight) * (speed - slow)) / (fast - slow))
+  return { speed, gap }
 }
 
 // The two orbits for a stage this wide around a mark of this radius: outer
@@ -61,12 +68,11 @@ function ringsFor(width: number, planet: number) {
   const ratio = phone ? 0.4 : 0.3
   const rx = Math.min(width * 0.45, 400)
   const inner = Math.min(planet * 2.2, rx * 0.66)
-  // On a small ring, bunching up as much would pile the logos on each other.
-  const outerMotion = phone ? { ...OUTER_MOTION, squeeze: 0.3 } : OUTER_MOTION
-  return [
-    { logos: OUTER, rx, ry: rx * ratio, motion: outerMotion, direction: 1 },
+  const rings: Ring[] = [
+    { logos: OUTER, rx, ry: rx * ratio, motion: phone ? OUTER_MOTION_PHONE : OUTER_MOTION, direction: 1 },
     { logos: INNER, rx: inner, ry: inner * ratio, motion: INNER_MOTION, direction: -1 },
   ]
+  return rings
 }
 
 function reducedMotion(): boolean {
@@ -95,13 +101,19 @@ export default function ConnectorOrbit() {
   useEffect(() => {
     if (!size.w) return
     const rings = ringsFor(size.w, size.r)
-    // `seconds` since the animation started, or null to show the rings at rest.
-    const place = (seconds: number | null) => {
+    // Where each ring's train has its middle. It starts just past the top of
+    // the ring, about to drop.
+    const middles = rings.map(
+      (ring) => Math.atan2(ring.ry * Math.cos(TILT), ring.rx * Math.sin(TILT)) + Math.PI + ring.direction * 0.3,
+    )
+    // `atRest`: evenly spread, for people who ask for less motion.
+    const place = (atRest: boolean) => {
       let n = 0
-      for (const ring of rings) {
-        const t = seconds === null ? 0 : seconds + ring.motion.offset * ring.motion.breath
-        const angles = anglesAt(ring.logos.length, ring.direction, ring.motion, t)
-        angles.forEach((angle) => {
+      rings.forEach((ring, r) => {
+        const gap = atRest ? (2 * Math.PI) / ring.logos.length : ride(ring, middles[r]).gap
+        const middle = (ring.logos.length - 1) / 2
+        ring.logos.forEach((_, i) => {
+          const angle = middles[r] + ring.direction * (i - middle) * gap
           const el = itemsRef.current[n++]
           if (!el) return
           const x = Math.cos(angle) * ring.rx
@@ -114,18 +126,24 @@ export default function ConnectorOrbit() {
           el.style.opacity = String(0.45 + near * 0.55)
           el.style.zIndex = near > 0.5 ? '30' : '10'
         })
-      }
+      })
     }
 
     if (reducedMotion()) {
-      place(null)
+      place(true)
       return
     }
     let frame = 0
     let visible = true
-    const start = performance.now()
+    let last = performance.now()
     const tick = (now: number) => {
-      place((now - start) / 1000)
+      // Capped, so coming back to the page doesn't throw the trains forward.
+      const seconds = Math.min((now - last) / 1000, 0.05)
+      last = now
+      rings.forEach((ring, r) => {
+        middles[r] += ring.direction * ride(ring, middles[r]).speed * seconds
+      })
+      place(false)
       frame = visible ? requestAnimationFrame(tick) : 0
     }
     // Only animate while the section is on screen.
