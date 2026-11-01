@@ -6,8 +6,9 @@ import { CONNECTORS } from '../lib/connectors'
 // elliptical orbits (in opposite directions), with no orbit lines drawn. The
 // inner one is like a planet's ring: wider than the mark but not as tall, so
 // its logos cross it. Logos in front grow and pass over the mark; those
-// behind shrink, fade and pass under it. Drawn without tiles, like the
-// Connect page.
+// behind shrink, fade and pass under it. Each ring's logos keep speeding up
+// as they bunch together, then slowing down as they spread out again. Drawn
+// without tiles, like the Connect page.
 
 type Orbiter = { src: string; name: string; mono: boolean; wide: boolean }
 
@@ -24,22 +25,47 @@ const OUTER = LOGOS.filter((l) => !INNER_NAMES.has(l.name))
 const INNER = LOGOS.filter((l) => INNER_NAMES.has(l.name))
 
 const TILT = (-14 * Math.PI) / 180
-// Seconds per lap.
-const OUTER_LAP = 48
-const INNER_LAP = 36
+
+// How a ring moves. Once every `breath` seconds its logos speed up from one
+// lap per `slowLap` seconds to one per `fastLap` while the gaps between them
+// shrink by `squeeze`, then slow down and spread out evenly again. `offset`
+// is how far into a breath the ring starts. With these numbers no logo ever
+// moves backwards while the group bunches up or spreads out.
+type Motion = { breath: number; slowLap: number; fastLap: number; squeeze: number; offset: number }
+const OUTER_MOTION: Motion = { breath: 24, slowLap: 55, fastLap: 12, squeeze: 0.5, offset: 0.15 }
+const INNER_MOTION: Motion = { breath: 17, slowLap: 40, fastLap: 9, squeeze: 0.45, offset: 0.6 }
+
+// Each logo's angle on its ring, `t` seconds into the ring's motion. 0 is
+// the ring at rest: evenly spread.
+function anglesAt(count: number, direction: number, motion: Motion, t: number): number[] {
+  const slow = (2 * Math.PI) / motion.slowLap
+  const fast = (2 * Math.PI) / motion.fastLap
+  const w = (2 * Math.PI) / motion.breath
+  // 0 when evenly spread, 1 when bunched up.
+  const gathered = (1 - Math.cos(w * t)) / 2
+  // How far the group has gone: its speed rises and falls with `gathered`.
+  const travelled = slow * t + (fast - slow) * (t / 2 - Math.sin(w * t) / (2 * w))
+  const even = (2 * Math.PI) / count
+  const gap = even * (1 - motion.squeeze * gathered)
+  const middle = (count - 1) / 2
+  return Array.from({ length: count }, (_, i) => direction * (travelled + (i - middle) * gap))
+}
 
 // The two orbits for a stage this wide around a mark of this radius: outer
 // clockwise, inner the other way. Both are the same shape (one height to
 // width ratio, one centre, one tilt), so they sit symmetrically; the inner one
 // is wider than the mark but not as tall, so it passes in front of and behind it.
 function ringsFor(width: number, planet: number) {
+  const phone = width < 640
   // Rounder on phones, where flat ellipses would crowd the mark.
-  const ratio = width < 640 ? 0.4 : 0.3
+  const ratio = phone ? 0.4 : 0.3
   const rx = Math.min(width * 0.45, 400)
   const inner = Math.min(planet * 2.2, rx * 0.66)
+  // On a small ring, bunching up as much would pile the logos on each other.
+  const outerMotion = phone ? { ...OUTER_MOTION, squeeze: 0.3 } : OUTER_MOTION
   return [
-    { logos: OUTER, rx, ry: rx * ratio, lap: OUTER_LAP, direction: 1 },
-    { logos: INNER, rx: inner, ry: inner * ratio, lap: INNER_LAP, direction: -1 },
+    { logos: OUTER, rx, ry: rx * ratio, motion: outerMotion, direction: 1 },
+    { logos: INNER, rx: inner, ry: inner * ratio, motion: INNER_MOTION, direction: -1 },
   ]
 }
 
@@ -69,13 +95,15 @@ export default function ConnectorOrbit() {
   useEffect(() => {
     if (!size.w) return
     const rings = ringsFor(size.w, size.r)
-    const place = (seconds: number) => {
+    // `seconds` since the animation started, or null to show the rings at rest.
+    const place = (seconds: number | null) => {
       let n = 0
       for (const ring of rings) {
-        ring.logos.forEach((_, i) => {
+        const t = seconds === null ? 0 : seconds + ring.motion.offset * ring.motion.breath
+        const angles = anglesAt(ring.logos.length, ring.direction, ring.motion, t)
+        angles.forEach((angle) => {
           const el = itemsRef.current[n++]
           if (!el) return
-          const angle = (i / ring.logos.length) * Math.PI * 2 + ring.direction * (seconds / ring.lap) * Math.PI * 2
           const x = Math.cos(angle) * ring.rx
           const y = Math.sin(angle) * ring.ry
           // Tilt the ellipse; sin(angle) > 0 is the near side.
@@ -90,7 +118,7 @@ export default function ConnectorOrbit() {
     }
 
     if (reducedMotion()) {
-      place(0)
+      place(null)
       return
     }
     let frame = 0
